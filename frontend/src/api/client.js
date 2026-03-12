@@ -1,0 +1,189 @@
+const BASE = '/api';
+
+async function request(url, options = {}) {
+  const res = await fetch(`${BASE}${url}`, {
+    headers: { 'Content-Type': 'application/json', ...options.headers },
+    ...options,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || 'Request failed');
+  }
+  return res.json();
+}
+
+// --- Task polling ---
+export const getTaskStatus = (taskId) => request(`/tasks/${taskId}`);
+
+/**
+ * Poll a background task until it completes or errors.
+ * Calls onProgress with each status update.
+ * Returns the final task result.
+ */
+export async function pollTask(taskId, onProgress, intervalMs = 1000) {
+  while (true) {
+    const task = await getTaskStatus(taskId);
+    if (onProgress) onProgress(task);
+
+    if (task.status === 'complete') return task;
+    if (task.status === 'error') throw new Error(task.error || 'Task failed');
+
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+}
+
+// --- Projects ---
+export const createProject = (name, description = '') =>
+  request('/projects', { method: 'POST', body: JSON.stringify({ name, description }) });
+
+export const listProjects = () => request('/projects');
+
+export const getProject = (name) => request(`/projects/${encodeURIComponent(name)}`);
+
+export const deleteProject = (name) =>
+  request(`/projects/${encodeURIComponent(name)}`, { method: 'DELETE' });
+
+export const uploadMainVideo = async (name, file, onProgress) => {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${BASE}/projects/${encodeURIComponent(name)}/upload`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress({ loaded: e.loaded, total: e.total, percent: Math.round((e.loaded / e.total) * 100) });
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText));
+      else reject(new Error(`Upload failed (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error('Upload failed'));
+    const formData = new FormData();
+    formData.append('file', file);
+    xhr.send(formData);
+  });
+};
+
+export const uploadIntro = async (name, file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(`${BASE}/projects/${encodeURIComponent(name)}/upload-intro`, { method: 'POST', body: formData });
+  if (!res.ok) throw new Error('Intro upload failed');
+  return res.json();
+};
+
+export const uploadOutro = async (name, file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(`${BASE}/projects/${encodeURIComponent(name)}/upload-outro`, { method: 'POST', body: formData });
+  if (!res.ok) throw new Error('Outro upload failed');
+  return res.json();
+};
+
+export const getVideoUrl = (name, stage = 'source') =>
+  `${BASE}/serve-video/${encodeURIComponent(name)}/${stage === 'captioned' ? 'processing/captioned.mp4' : stage === 'assembled' ? 'processing/assembled.mp4' : 'input/main.mp4'}`;
+
+// --- Assembly (background task) ---
+export const assembleVideo = (projectName, useIntro = false, useOutro = false) =>
+  request('/assembly/assemble', {
+    method: 'POST',
+    body: JSON.stringify({ project_name: projectName, use_intro: useIntro, use_outro: useOutro }),
+  });
+
+export const extractAudio = (projectName) =>
+  request(`/assembly/extract-audio?project_name=${encodeURIComponent(projectName)}`, { method: 'POST' });
+
+// --- Transcription (background task) ---
+export const transcribe = (projectName, quality = 'standard') =>
+  request('/transcription/transcribe', {
+    method: 'POST',
+    body: JSON.stringify({ project_name: projectName, model_size: quality }),
+  });
+
+export const getRawTranscript = (projectName) =>
+  request(`/transcription/${encodeURIComponent(projectName)}/raw`);
+
+// --- Transcript ---
+export const applyCorrections = (projectName) =>
+  request('/transcript/correct', {
+    method: 'POST',
+    body: JSON.stringify({ project_name: projectName }),
+  });
+
+export const cleanupTranscript = (projectName) =>
+  request('/transcript/cleanup', {
+    method: 'POST',
+    body: JSON.stringify({ project_name: projectName }),
+  });
+
+export const getCurrentTranscript = (projectName) =>
+  request(`/transcript/${encodeURIComponent(projectName)}/current`);
+
+export const saveTranscriptEdit = (projectName, segments) =>
+  request('/transcript/save-edit', {
+    method: 'POST',
+    body: JSON.stringify({ project_name: projectName, segments }),
+  });
+
+// --- Dictionary ---
+export const getDictionary = () => request('/transcript/dictionary');
+
+export const addDictEntry = (wrong, correct) =>
+  request('/transcript/dictionary/add', {
+    method: 'POST',
+    body: JSON.stringify({ wrong, correct }),
+  });
+
+export const removeDictEntry = (wrong) =>
+  request(`/transcript/dictionary/${encodeURIComponent(wrong)}`, { method: 'DELETE' });
+
+// --- Captions ---
+export const generateCaptions = (projectName, theme = 'theme_a') =>
+  request('/captions/generate', {
+    method: 'POST',
+    body: JSON.stringify({ project_name: projectName, theme }),
+  });
+
+export const getCaptions = (projectName) =>
+  request(`/captions/${encodeURIComponent(projectName)}`);
+
+export const getSrt = (projectName) =>
+  request(`/captions/${encodeURIComponent(projectName)}/srt`);
+
+export const getAss = (projectName) =>
+  request(`/captions/${encodeURIComponent(projectName)}/ass`);
+
+// Burn captions (background task)
+export const burnCaptions = (projectName, theme = 'theme_a') =>
+  request('/captions/burn', {
+    method: 'POST',
+    body: JSON.stringify({ project_name: projectName, theme }),
+  });
+
+// --- Metadata ---
+export const generateMetadata = (projectName) =>
+  request('/metadata/generate', {
+    method: 'POST',
+    body: JSON.stringify({ project_name: projectName }),
+  });
+
+export const getMetadata = (projectName) =>
+  request(`/metadata/${encodeURIComponent(projectName)}`);
+
+export const saveMetadata = (projectName, description, chapters, tags) =>
+  request(`/metadata/${encodeURIComponent(projectName)}/save`, {
+    method: 'POST',
+    body: JSON.stringify({ description, chapters, tags }),
+  });
+
+// --- Export ---
+export const createExportPackage = (projectName) =>
+  request('/export/package', {
+    method: 'POST',
+    body: JSON.stringify({ project_name: projectName }),
+  });
+
+export const listExportFiles = (projectName) =>
+  request(`/export/${encodeURIComponent(projectName)}/files`);
+
+export const getExportDownloadUrl = (projectName, filename) =>
+  `${BASE}/export/${encodeURIComponent(projectName)}/download/${encodeURIComponent(filename)}`;
