@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import ProgressBar from './ProgressBar';
+import SeoChecklist from './SeoChecklist';
 import { createExportPackage, listExportFiles, getExportDownloadUrl } from '../api/client';
 
 export default function ExportPanel({ projectName, stages, onComplete }) {
@@ -47,7 +48,13 @@ export default function ExportPanel({ projectName, stages, onComplete }) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* SEO Checklist */}
+      <SeoChecklist projectName={projectName} stages={stages} />
+
+      <hr className="border-gray-800" />
+
+      {/* Export button */}
       {!exporting && (
         <button
           onClick={handleExport}

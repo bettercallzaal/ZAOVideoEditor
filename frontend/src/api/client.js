@@ -187,3 +187,51 @@ export const listExportFiles = (projectName) =>
 
 export const getExportDownloadUrl = (projectName, filename) =>
   `${BASE}/export/${encodeURIComponent(projectName)}/download/${encodeURIComponent(filename)}`;
+
+// --- Speakers (diarization) ---
+export const diarizeSpeakers = (projectName, numSpeakers = null) =>
+  request('/speakers/diarize', {
+    method: 'POST',
+    body: JSON.stringify({ project_name: projectName, num_speakers: numSpeakers }),
+  });
+
+export const getSpeakers = (projectName) =>
+  request(`/speakers/${encodeURIComponent(projectName)}`);
+
+export const renameSpeakers = (projectName, speakerMap) =>
+  request('/speakers/rename', {
+    method: 'POST',
+    body: JSON.stringify({ project_name: projectName, speaker_map: speakerMap }),
+  });
+
+// --- Fillers ---
+export const detectFillers = (projectName) =>
+  request('/fillers/detect', {
+    method: 'POST',
+    body: JSON.stringify({ project_name: projectName }),
+  });
+
+export const removeFillers = (projectName, types = null) =>
+  request('/fillers/remove', {
+    method: 'POST',
+    body: JSON.stringify({ project_name: projectName, types }),
+  });
+
+// --- Clips / Highlights ---
+export const detectHighlights = (projectName, count = 5, minDuration = 30, maxDuration = 90) =>
+  request('/clips/detect', {
+    method: 'POST',
+    body: JSON.stringify({ project_name: projectName, count, min_duration: minDuration, max_duration: maxDuration }),
+  });
+
+export const exportClip = (projectName, start, end, title = '', vertical = false) =>
+  request('/clips/export', {
+    method: 'POST',
+    body: JSON.stringify({ project_name: projectName, start, end, title, vertical }),
+  });
+
+export const listClips = (projectName) =>
+  request(`/clips/${encodeURIComponent(projectName)}/list`);
+
+export const getClipDownloadUrl = (projectName, filename) =>
+  `${BASE}/clips/${encodeURIComponent(projectName)}/download/${encodeURIComponent(filename)}`;

@@ -16,12 +16,17 @@ The full workflow in one app:
 4. **Transcribe** locally using Faster Whisper with configurable quality (fast/standard/high)
 5. **Correct** brand/name misspellings using a persistent shared dictionary
 6. **Clean and polish** the transcript — remove fillers, fix stutters, improve punctuation
-7. **Edit** the transcript manually in a video-synced editor (click to seek)
-8. **Generate captions** — single-line, 3-6 words, readable timing
-9. **Choose a caption theme** — Dark on Light or Light on Dark
-10. **Burn captions** into the video with Pillow + ffmpeg overlay
-11. **Generate YouTube metadata** — description, chapters, tags (NLP-powered, no external LLM)
-12. **Export** everything to a project folder: captioned video, SRT, ASS, transcript, metadata
+7. **Detect speakers** — identify who's talking using pyannote diarization (with energy-based fallback)
+8. **Find and remove filler words** — um, uh, "you know", "kind of", contextual fillers like "like" and "basically"
+9. **Edit** the transcript manually in a video-synced editor (click to seek, filter by speaker)
+10. **Generate captions** — single-line, 3-6 words, readable timing
+11. **Choose a caption theme** — Dark on Light or Light on Dark
+12. **Burn captions** into the video with Pillow + ffmpeg overlay
+13. **Detect highlights** — find the most engaging moments for clips/shorts
+14. **Export clips** — landscape or vertical 9:16 for YouTube Shorts, TikTok, Reels
+15. **Generate YouTube metadata** — description, chapters, tags (NLP-powered, no external LLM)
+16. **SEO checklist** — automated YouTube readiness validation before export
+17. **Export** everything to a project folder: captioned video, SRT, ASS, transcript, metadata
 
 Any stage can be re-run independently. Edit the transcript and regenerate just the captions. Switch themes and re-burn. Regenerate metadata without re-transcribing.
 
@@ -84,6 +89,7 @@ Backend API docs at **http://localhost:8000/docs**
 | Frontend | React 19, Vite 7, Tailwind CSS 4 |
 | Backend | FastAPI, Uvicorn, Pydantic |
 | Transcription | Faster Whisper (local, CPU, int8) |
+| Speaker Diarization | pyannote.audio (with energy-based fallback) |
 | Video/Audio | ffmpeg, ffprobe |
 | Caption Rendering | Pillow (PIL) for text-to-PNG, ffmpeg overlay filter |
 | Language | Python 3.13, Node.js |
@@ -106,6 +112,9 @@ ZAOVideoEditor/
 │   │   ├── transcript.py          # Dictionary correction, cleanup, editing
 │   │   ├── captions.py            # Caption generation, SRT/ASS, burn-in (background task)
 │   │   ├── metadata.py            # YouTube description/chapters/tags
+│   │   ├── speakers.py            # Speaker diarization endpoints
+│   │   ├── fillers.py             # Filler word detection/removal endpoints
+│   │   ├── clips.py               # Highlight detection and clip export endpoints
 │   │   └── export.py              # Export package assembly
 │   ├── services/
 │   │   ├── ffmpeg_service.py      # All ffmpeg operations + Pillow caption rendering
@@ -114,7 +123,10 @@ ZAOVideoEditor/
 │   │   ├── dictionary.py          # Persistent correction dictionary
 │   │   ├── cleanup.py             # Transcript polishing (fillers, punctuation)
 │   │   ├── caption_gen.py         # Caption splitting, timing, SRT/ASS generation
-│   │   └── metadata_gen.py        # NLP-powered metadata generation (TF-IDF, entity extraction)
+│   │   ├── metadata_gen.py        # NLP-powered metadata generation (TF-IDF, entity extraction)
+│   │   ├── diarization.py         # Speaker diarization (pyannote + energy fallback)
+│   │   ├── filler_detection.py    # Word-level filler detection and removal
+│   │   └── highlights.py          # Highlight/clip detection with engagement scoring
 │   └── models/
 │       └── schemas.py             # Pydantic request/response models
 ├── frontend/
@@ -130,7 +142,9 @@ ZAOVideoEditor/
 │   │       ├── CaptionPanel.jsx   # Theme selection, generate, burn, preview
 │   │       ├── MetadataPanel.jsx  # Editable YouTube metadata with copy buttons
 │   │       ├── DictionaryManager.jsx # Add/remove correction entries
-│   │       ├── ExportPanel.jsx    # Package and download exports
+│   │       ├── ClipsPanel.jsx     # Highlight detection and clip export
+│   │       ├── SeoChecklist.jsx   # YouTube SEO readiness checklist
+│   │       ├── ExportPanel.jsx    # SEO check + package and download exports
 │   │       ├── StageStatus.jsx    # Pipeline stage indicators
 │   │       ├── ProgressBar.jsx    # Animated progress with substeps
 │   │       └── ProjectList.jsx    # Project creation and selection
@@ -158,11 +172,12 @@ ZAOVideoEditor/
 The default view. Video player on the left, tabbed panels on the right:
 
 - **Upload** — add main video, select transcription quality, optional intro/outro, run assemble + transcribe
-- **Transcript** — correct, clean, edit, save, add dictionary entries
+- **Transcript** — correct, clean, edit, save, add dictionary entries, detect speakers, find/remove fillers
 - **Captions** — pick theme, generate, preview SRT/ASS, burn into video
+- **Clips** — detect highlight moments, export clips (landscape or vertical 9:16 for Shorts/Reels)
 - **Metadata** — generate YouTube description/chapters/tags, edit, copy, save
 - **Dictionary** — manage shared brand/name corrections
-- **Export** — package all outputs for download
+- **Export** — SEO readiness checklist + package all outputs for download
 
 Stage status indicators in the top bar show what's complete.
 
@@ -246,6 +261,65 @@ The metadata generator uses NLP techniques to produce YouTube-ready descriptions
 - Copy buttons per field + "Copy All" for full package
 - All fields are editable before saving
 
+### Speaker Diarization
+
+Identify who's speaking in multi-person recordings:
+
+- **Primary**: pyannote/speaker-diarization-3.1 (requires one-time HuggingFace token acceptance)
+- **Fallback**: Energy-based detection using ffmpeg silencedetect — alternates speaker assignment at silence boundaries (no dependencies needed)
+- Labels each transcript segment as SPEAKER_0, SPEAKER_1, etc.
+- **Rename speakers** from the Transcript tab (e.g., SPEAKER_0 → "Host", SPEAKER_1 → "Guest")
+- **Filter by speaker** to view only one person's segments
+- Color-coded speaker labels (8-color palette)
+
+### Filler Word Detection & Removal
+
+Three tiers of filler detection with configurable removal:
+
+| Type | Examples | Detection |
+|------|----------|-----------|
+| **Filler words** | um, uh, er, ah, hmm | Direct match |
+| **Filler phrases** | "you know", "I mean", "kind of", "sort of" | Multi-word match |
+| **Contextual fillers** | like, basically, right, literally | Context-aware (avoids false positives like "I like this") |
+
+- Scan transcript to see filler count and frequency per word
+- Remove all, or selectively by type (e.g., "um/uh only" or "fillers + phrases")
+- Word-level precision — removes the filler and rebuilds segment text
+
+### Highlight Detection & Clip Export
+
+Find the most engaging moments in a conversation and export them as clips:
+
+**Detection scoring factors:**
+- Engagement signals (words like "incredible", "realized", "never", "always")
+- Question density (audience curiosity moments)
+- Proper noun / entity density (topic-rich sections)
+- Quote patterns (quotable statements)
+- Vocabulary diversity (information-dense passages)
+- Speaker change frequency (dynamic exchanges)
+
+**Export options:**
+- Standard landscape clip
+- Vertical 9:16 crop for YouTube Shorts, TikTok, Instagram Reels
+- Configurable: number of clips, min/max duration
+- Non-overlapping — top highlights don't duplicate content
+
+### YouTube SEO Checklist
+
+Automated pre-export validation, shown in the Export tab:
+
+- Transcript available
+- Captions generated
+- Description length (50+ chars, ideal 200-5000)
+- First 150 characters hook quality (search snippet)
+- Chapters start at 00:00 (YouTube requirement)
+- Minimum 3 chapters (YouTube requirement)
+- Tag count (5-20 recommended) and character limit (500 max)
+- Burned captions (optional, recommended for social)
+- Custom thumbnail reminder
+
+Calculates a percentage score with color-coded progress bar (red/yellow/green).
+
 ### Stage Re-runs
 
 Each stage writes intermediate files. You can re-run any stage independently:
@@ -328,6 +402,15 @@ All under `/api/`. Full interactive docs at `http://localhost:8000/docs`.
 | POST | `/api/export/package` | Create export package |
 | GET | `/api/export/{name}/files` | List export files |
 | GET | `/api/export/{name}/download/{file}` | Download export file |
+| POST | `/api/speakers/diarize` | Run speaker diarization (background task) |
+| POST | `/api/speakers/rename` | Rename speaker labels |
+| GET | `/api/speakers/{name}` | Get speaker info |
+| POST | `/api/fillers/detect` | Detect filler words in transcript |
+| POST | `/api/fillers/remove` | Remove fillers and save transcript |
+| POST | `/api/clips/detect` | Detect highlight moments |
+| POST | `/api/clips/export` | Export clip as video (background task) |
+| GET | `/api/clips/{name}/list` | List exported clips |
+| GET | `/api/clips/{name}/download/{file}` | Download exported clip |
 | GET | `/api/tasks/{task_id}` | Poll background task status |
 | GET | `/api/tasks/project/{name}` | Get all tasks for a project |
 
@@ -335,11 +418,9 @@ All under `/api/`. Full interactive docs at `http://localhost:8000/docs`.
 
 ## What's Not Included (By Design)
 
-This is an MVP scoped for one creator making YouTube-ready conversation videos:
+This is scoped for one creator making YouTube-ready conversation videos:
 
-- No speaker diarization
 - No timeline editor
-- No clip extraction / shorts
 - No multilingual workflows
 - No auto-upload to YouTube
 - No cloud sync, accounts, or auth
