@@ -9,32 +9,9 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from ..services import task_manager as tm
 from ..services.tool_availability import check_tool
+from ..services.project_utils import get_project_dir as _get_project_dir, find_video as _find_video, PROJECTS_DIR
 
 router = APIRouter(prefix="/api/ai", tags=["ai-tools"])
-
-PROJECTS_DIR = Path(__file__).parent.parent.parent / "projects"
-
-
-def _get_project_dir(name: str) -> Path:
-    d = PROJECTS_DIR / name
-    if not d.exists():
-        raise HTTPException(404, "Project not found")
-    return d
-
-
-def _find_video(project_dir: Path) -> Path:
-    for candidate in [
-        project_dir / "processing" / "captioned.mp4",
-        project_dir / "processing" / "trimmed.mp4",
-        project_dir / "processing" / "assembled.mp4",
-    ]:
-        if candidate.exists():
-            return candidate
-    for ext in [".mp4", ".mov", ".mkv", ".webm"]:
-        p = project_dir / "input" / f"main{ext}"
-        if p.exists():
-            return p
-    raise HTTPException(404, "No video found in project")
 
 
 # ===== TIER 1: CPU-FRIENDLY =====

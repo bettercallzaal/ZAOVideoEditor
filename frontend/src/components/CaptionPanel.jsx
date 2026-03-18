@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import ProgressBar from './ProgressBar';
 import CaptionTimeline from './CaptionTimeline';
+import { formatTime } from '../utils/format';
 import {
   generateCaptions, getCaptions, saveCaptions,
   burnCaptions, getSrt, getAss, pollTask, getAvailableTools,
@@ -85,13 +86,6 @@ function StylePreview({ style, selected, onSelect }) {
       <p className="text-xs font-medium text-gray-200">{style.name}</p>
     </button>
   );
-}
-
-function formatTime(seconds) {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  const ms = Math.floor((seconds % 1) * 10);
-  return `${m}:${s.toString().padStart(2, '0')}.${ms}`;
 }
 
 export default function CaptionPanel({
@@ -501,7 +495,7 @@ export default function CaptionPanel({
                   onClick={(e) => { e.stopPropagation(); onSeek(cap.start); }}
                   className="text-[#e0ddaa] text-[10px] font-mono shrink-0 hover:underline w-14 text-right pt-0.5"
                 >
-                  {formatTime(cap.start)}
+                  {formatTime(cap.start, true)}
                 </button>
 
                 {/* Text */}

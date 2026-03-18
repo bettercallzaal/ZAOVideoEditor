@@ -25,24 +25,19 @@ export default function ExportPanel({ projectName, stages, onComplete }) {
   const handleExport = async () => {
     setExporting(true);
     setError('');
-    setProgress(10);
+    setProgress(50);
     setProgressStatus('Packaging export files...');
-
-    const interval = setInterval(() => {
-      setProgress(prev => prev >= 80 ? prev : prev + 15);
-    }, 500);
 
     try {
       const result = await createExportPackage(projectName);
-      clearInterval(interval);
       setProgress(100);
       setProgressStatus(`Export complete — ${result.files.length} files packaged`);
       setFiles(result.files);
       onComplete();
     } catch (e) {
-      clearInterval(interval);
       setError(`Export failed: ${e.message}`);
-      setProgressStatus('Failed');
+      setProgress(0);
+      setProgressStatus('');
     } finally {
       setExporting(false);
     }

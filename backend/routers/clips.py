@@ -7,12 +7,10 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
 from ..services.highlights import detect_highlights, export_clip_timestamps
-from ..services.whisper_service import load_transcript
+from ..services.project_utils import find_video, find_best_transcript, PROJECTS_DIR
 from ..services import task_manager as tm
 
 router = APIRouter(prefix="/api/clips", tags=["clips"])
-
-PROJECTS_DIR = Path(__file__).parent.parent.parent / "projects"
 
 
 class HighlightRequest(BaseModel):
@@ -31,11 +29,7 @@ class ClipExportRequest(BaseModel):
 
 
 def _get_best_transcript(project_dir: Path):
-    for name in ["edited.json", "cleaned.json", "corrected.json", "raw.json"]:
-        path = project_dir / "transcripts" / name
-        if path.exists():
-            return load_transcript(str(path))
-    raise HTTPException(404, "No transcript found")
+    return find_best_transcript(project_dir)
 
 
 @router.post("/detect")
@@ -64,25 +58,7 @@ def _do_export_clip(task_id: str, project_dir: Path, start: float, end: float,
     """Background clip extraction worker."""
     tm.update_task(task_id, progress=10, message="Finding source video...")
 
-    # Find source video
-    video_path = None
-    for candidate in [
-        project_dir / "processing" / "captioned.mp4",
-        project_dir / "processing" / "assembled.mp4",
-    ]:
-        if candidate.exists():
-            video_path = candidate
-            break
-
-    if not video_path:
-        for ext in [".mp4", ".mov", ".mkv", ".webm"]:
-            p = project_dir / "input" / f"main{ext}"
-            if p.exists():
-                video_path = p
-                break
-
-    if not video_path:
-        raise FileNotFoundError("No video found")
+    video_path = find_video(project_dir, include_captioned=True)
 
     clips_dir = project_dir / "clips"
     clips_dir.mkdir(exist_ok=True)
@@ -118,7 +94,8 @@ def _do_export_clip(task_id: str, project_dir: Path, start: float, end: float,
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        raise RuntimeError(f"ffmpeg failed: {result.stderr[-500:]}")
+        print(f"ffmpeg clip export failed: {result.stderr[-500:]}")
+        raise RuntimeError("Clip export encoding failed")
 
     tm.update_task(task_id, progress=95, message="Clip ready")
 
@@ -160,7 +137,9 @@ async def list_clips(project_name: str):
 @router.get("/{project_name}/download/{filename}")
 async def download_clip(project_name: str, filename: str):
     """Download an exported clip."""
-    file_path = PROJECTS_DIR / project_name / "clips" / filename
+    file_path = (PROJECTS_DIR / project_name / "clips" / filename).resolve()
+    if not str(file_path).startswith(str((PROJECTS_DIR).resolve())):
+        raise HTTPException(403, "Access denied")
     if not file_path.exists():
         raise HTTPException(404, "Clip not found")
     return FileResponse(str(file_path), filename=filename)

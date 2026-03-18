@@ -10,12 +10,14 @@ import DictionaryManager from './DictionaryManager';
 import ExportPanel from './ExportPanel';
 import ClipsPanel from './ClipsPanel';
 import AiToolsPanel from './AiToolsPanel';
+import YouTubePanel from './YouTubePanel';
 import SeoChecklist from './SeoChecklist';
 import GuidedMode from './GuidedMode';
 import { getProject, getVideoUrl } from '../api/client';
 
 const TABS = [
   { id: 'upload', label: 'Upload' },
+  { id: 'youtube', label: 'YouTube' },
   { id: 'transcript', label: 'Transcript' },
   { id: 'captions', label: 'Captions' },
   { id: 'clips', label: 'Clips' },
@@ -38,9 +40,24 @@ export default function Workspace({ projectName, onBack }) {
 
   // Caption state shared between CaptionPanel and CaptionOverlay
   const [liveCaptions, setLiveCaptions] = useState([]);
-  const [captionStyle, setCaptionStyle] = useState('classic');
-  const [captionPosition, setCaptionPosition] = useState({ x: 50, y: 88 });
+  const [captionStyle, setCaptionStyle] = useState(() => {
+    try { return localStorage.getItem(`zao:${projectName}:captionStyle`) || 'classic'; } catch { return 'classic'; }
+  });
+  const [captionPosition, setCaptionPosition] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`zao:${projectName}:captionPos`);
+      return saved ? JSON.parse(saved) : { x: 50, y: 88 };
+    } catch { return { x: 50, y: 88 }; }
+  });
   const [selectedCaptionId, setSelectedCaptionId] = useState(null);
+
+  // Persist caption position and style to localStorage
+  useEffect(() => {
+    try { localStorage.setItem(`zao:${projectName}:captionPos`, JSON.stringify(captionPosition)); } catch {}
+  }, [captionPosition, projectName]);
+  useEffect(() => {
+    try { localStorage.setItem(`zao:${projectName}:captionStyle`, captionStyle); } catch {}
+  }, [captionStyle, projectName]);
 
   const refreshProject = useCallback(async () => {
     try {
@@ -48,8 +65,7 @@ export default function Workspace({ projectName, onBack }) {
       setProject(data);
 
       // Set video source based on what's available
-      // When on captions tab, prefer un-captioned source so overlay is visible
-      if (data.stages.burn_captions === 'complete' && activeTab !== 'captions') {
+      if (data.stages.burn_captions === 'complete') {
         setVideoSrc(getVideoUrl(projectName, 'captioned'));
       } else if (data.stages.assembly === 'complete') {
         setVideoSrc(getVideoUrl(projectName, 'assembled'));
@@ -59,7 +75,7 @@ export default function Workspace({ projectName, onBack }) {
     } catch (e) {
       console.error('Failed to load project:', e);
     }
-  }, [projectName, activeTab]);
+  }, [projectName]);
 
   useEffect(() => { refreshProject(); }, [refreshProject]);
 
@@ -182,6 +198,13 @@ export default function Workspace({ projectName, onBack }) {
           <div className="flex-1 overflow-hidden p-4 flex flex-col">
             {activeTab === 'upload' && (
               <UploadPanel
+                projectName={projectName}
+                stages={project.stages}
+                onComplete={handleStageComplete}
+              />
+            )}
+            {activeTab === 'youtube' && (
+              <YouTubePanel
                 projectName={projectName}
                 stages={project.stages}
                 onComplete={handleStageComplete}

@@ -6,10 +6,9 @@ from pydantic import BaseModel
 from typing import Optional
 from ..services.filler_detection import detect_fillers, remove_fillers_from_transcript
 from ..services.whisper_service import load_transcript, save_transcript
+from ..services.project_utils import PROJECTS_DIR
 
 router = APIRouter(prefix="/api/fillers", tags=["fillers"])
-
-PROJECTS_DIR = Path(__file__).parent.parent.parent / "projects"
 
 
 class FillerRequest(BaseModel):

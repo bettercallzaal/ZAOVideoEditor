@@ -5,19 +5,23 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pathlib import Path
 
-from .routers import projects, assembly, transcription, transcript, captions, metadata, export, speakers, fillers, clips, silence, ai_tools
+from .routers import projects, assembly, transcription, transcript, captions, metadata, export, speakers, fillers, clips, silence, ai_tools, youtube
 
 app = FastAPI(title="ZAO Video Editor", version="0.1.0")
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Return detailed error messages instead of generic 500."""
+    """Log full error details but return sanitized message to client."""
     tb = traceback.format_exc()
     print(f"ERROR: {exc}\n{tb}")
+    # Don't leak internal details (ffmpeg stderr, file paths, etc.)
+    msg = str(exc)
+    if any(kw in msg.lower() for kw in ["stderr", "traceback", "/users/", "/home/", "errno"]):
+        msg = "An internal error occurred. Check server logs for details."
     return JSONResponse(
         status_code=500,
-        content={"detail": str(exc)},
+        content={"detail": msg},
     )
 
 # CORS for local development
@@ -42,6 +46,7 @@ app.include_router(fillers.router)
 app.include_router(clips.router)
 app.include_router(silence.router)
 app.include_router(ai_tools.router)
+app.include_router(youtube.router)
 
 # Serve video files from projects directory
 PROJECTS_DIR = Path(__file__).parent.parent / "projects"
@@ -50,12 +55,22 @@ PROJECTS_DIR = Path(__file__).parent.parent / "projects"
 @app.get("/api/serve-video/{project_name}/{subpath:path}")
 async def serve_video(project_name: str, subpath: str):
     """Serve video files for the player."""
-    file_path = PROJECTS_DIR / project_name / subpath
+    from fastapi import HTTPException
+    file_path = (PROJECTS_DIR / project_name / subpath).resolve()
+    # Prevent path traversal
+    if not str(file_path).startswith(str(PROJECTS_DIR.resolve())):
+        raise HTTPException(403, "Access denied")
     if not file_path.exists():
-        return {"error": "File not found"}
+        raise HTTPException(404, "File not found")
+    suffix = file_path.suffix.lower()
+    media_types = {
+        ".mp4": "video/mp4", ".mov": "video/quicktime",
+        ".mkv": "video/x-matroska", ".webm": "video/webm",
+        ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    }
     return FileResponse(
         str(file_path),
-        media_type="video/mp4",
+        media_type=media_types.get(suffix, "application/octet-stream"),
         headers={"Accept-Ranges": "bytes"},
     )
 

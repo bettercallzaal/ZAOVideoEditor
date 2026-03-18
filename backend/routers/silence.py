@@ -4,10 +4,9 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from ..services import task_manager as tm
+from ..services.project_utils import find_video as _find_video, PROJECTS_DIR
 
 router = APIRouter(prefix="/api/silence", tags=["silence"])
-
-PROJECTS_DIR = Path(__file__).parent.parent.parent / "projects"
 
 
 class SilenceRemovalRequest(BaseModel):
@@ -20,17 +19,6 @@ class SilencePreviewRequest(BaseModel):
     project_name: str
     margin: float = 0.1
     threshold: float = 0.04
-
-
-def _find_video(project_dir: Path) -> Path:
-    assembled = project_dir / "processing" / "assembled.mp4"
-    if assembled.exists():
-        return assembled
-    for ext in [".mp4", ".mov", ".mkv", ".webm"]:
-        p = project_dir / "input" / f"main{ext}"
-        if p.exists():
-            return p
-    raise HTTPException(404, "No video found")
 
 
 @router.post("/preview")

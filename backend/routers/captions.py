@@ -7,31 +7,10 @@ from ..services.caption_gen import (
     save_captions, STYLES,
 )
 from ..services.ffmpeg_service import get_video_params, burn_captions
-from ..services.whisper_service import load_transcript
+from ..services.project_utils import find_video as find_source_video, find_best_transcript as get_best_transcript, PROJECTS_DIR
 from ..services import task_manager as tm
 
 router = APIRouter(prefix="/api/captions", tags=["captions"])
-
-PROJECTS_DIR = Path(__file__).parent.parent.parent / "projects"
-
-
-def get_best_transcript(project_dir: Path) -> dict:
-    for name in ["edited.json", "cleaned.json", "corrected.json", "raw.json"]:
-        path = project_dir / "transcripts" / name
-        if path.exists():
-            return load_transcript(str(path))
-    raise HTTPException(404, "No transcript found")
-
-
-def find_source_video(project_dir: Path) -> Path:
-    assembled = project_dir / "processing" / "assembled.mp4"
-    if assembled.exists():
-        return assembled
-    for ext in [".mp4", ".mov", ".mkv", ".webm"]:
-        p = project_dir / "input" / f"main{ext}"
-        if p.exists():
-            return p
-    raise HTTPException(404, "No video found")
 
 
 @router.get("/styles")

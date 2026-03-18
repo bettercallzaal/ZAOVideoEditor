@@ -22,9 +22,13 @@ export default function App() {
   useEffect(() => { refreshProjects(); }, []);
 
   const handleCreate = async (name) => {
-    await createProject(name);
-    await refreshProjects();
-    setCurrentProject(name);
+    try {
+      await createProject(name);
+      await refreshProjects();
+      setCurrentProject(name);
+    } catch (e) {
+      alert(`Failed to create project: ${e.message}`);
+    }
   };
 
   const handleDelete = async (name) => {

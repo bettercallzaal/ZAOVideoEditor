@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
+import { formatTime } from '../utils/format';
 
 /**
  * Horizontal timeline showing caption blocks.
@@ -6,12 +7,6 @@ import { useRef, useState, useCallback, useEffect } from 'react';
  * - Drag left/right edges to adjust start/end timing
  * - Playhead indicator shows current time
  */
-
-function formatTime(seconds) {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
 
 export default function CaptionTimeline({
   captions,

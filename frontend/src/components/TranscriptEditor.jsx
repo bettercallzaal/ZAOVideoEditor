@@ -1,17 +1,12 @@
 import { useState, useEffect } from 'react';
 import ProgressBar from './ProgressBar';
+import { formatTime } from '../utils/format';
 import {
   getCurrentTranscript, applyCorrections, cleanupTranscript,
   saveTranscriptEdit, addDictEntry,
   diarizeSpeakers, renameSpeakers, pollTask,
   detectFillers, removeFillers,
 } from '../api/client';
-
-function formatTime(seconds) {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
 
 // Speaker color palette
 const SPEAKER_COLORS = [

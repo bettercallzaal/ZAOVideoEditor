@@ -1,9 +1,11 @@
 import os
 import json
 import shutil
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+from fastapi.responses import FileResponse
 from ..models.schemas import ProjectCreate, ProjectInfo
 from ..services.storage import (
     get_project_storage, get_all_projects_storage,
@@ -163,10 +165,51 @@ async def upload_main_video(name: str, file: UploadFile = File(...)):
     for existing in input_dir.glob("main.*"):
         existing.unlink()
 
+    # Check available disk space (require at least 1GB free)
+    import shutil as _shutil
+    disk_usage = _shutil.disk_usage(str(input_dir))
+    if disk_usage.free < 1024 * 1024 * 1024:
+        raise HTTPException(507, "Insufficient disk space (need at least 1GB free)")
+
+    MAX_FILE_SIZE = 10 * 1024 * 1024 * 1024  # 10 GB limit
     dest = input_dir / f"main{ext}"
+    total_written = 0
     with open(dest, "wb") as f:
         while chunk := await file.read(1024 * 1024):
+            total_written += len(chunk)
+            if total_written > MAX_FILE_SIZE:
+                f.close()
+                dest.unlink()
+                raise HTTPException(413, "File too large (max 10 GB)")
             f.write(chunk)
+
+    # Remux non-mp4 formats to mp4 container for browser compatibility
+    # Uses stream copy (no re-encode) so it's fast even for large files
+    if ext != ".mp4":
+        mp4_dest = input_dir / "main.mp4"
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", str(dest), "-c", "copy",
+                 "-movflags", "+faststart", str(mp4_dest)],
+                check=True, capture_output=True, timeout=120,
+            )
+            dest.unlink()  # Remove original non-mp4
+            dest = mp4_dest
+            ext = ".mp4"
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            # If stream copy fails (incompatible codec), do a fast re-encode
+            try:
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", str(dest), "-c:v", "libx264",
+                     "-preset", "ultrafast", "-crf", "18", "-c:a", "aac",
+                     "-movflags", "+faststart", str(mp4_dest)],
+                    check=True, capture_output=True, timeout=600,
+                )
+                dest.unlink()
+                dest = mp4_dest
+                ext = ".mp4"
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                pass  # Keep original if all else fails
 
     return {"status": "uploaded", "filename": f"main{ext}", "size": dest.stat().st_size}
 
@@ -237,6 +280,43 @@ async def get_video_url(name: str, stage: str = "source"):
         raise HTTPException(404, "Video not found")
 
     return {"path": str(video), "filename": video.name}
+
+
+@router.get("/{name}/video-stream")
+async def stream_video(name: str, stage: str = "source"):
+    """Serve the actual video file for the player."""
+    project_dir = get_project_dir(name)
+    if not project_dir.exists():
+        raise HTTPException(404, "Project not found")
+
+    if stage == "captioned":
+        video = project_dir / "processing" / "captioned.mp4"
+    elif stage == "assembled":
+        video = project_dir / "processing" / "assembled.mp4"
+    else:
+        video = None
+        for ext in [".mp4", ".mov", ".mkv", ".webm"]:
+            candidate = project_dir / "input" / f"main{ext}"
+            if candidate.exists():
+                video = candidate
+                break
+
+    if not video or not video.exists():
+        raise HTTPException(404, "Video not found")
+
+    media_types = {
+        ".mp4": "video/mp4",
+        ".mov": "video/quicktime",
+        ".mkv": "video/x-matroska",
+        ".webm": "video/webm",
+    }
+    media_type = media_types.get(video.suffix.lower(), "video/mp4")
+
+    return FileResponse(
+        str(video),
+        media_type=media_type,
+        headers={"Accept-Ranges": "bytes"},
+    )
 
 
 # --- Storage endpoints ---

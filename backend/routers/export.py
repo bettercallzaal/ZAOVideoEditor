@@ -100,7 +100,9 @@ async def list_export_files(project_name: str):
 @router.get("/{project_name}/download/{filename}")
 async def download_file(project_name: str, filename: str):
     """Download an export file."""
-    file_path = PROJECTS_DIR / project_name / "exports" / filename
+    file_path = (PROJECTS_DIR / project_name / "exports" / filename).resolve()
+    if not str(file_path).startswith(str((PROJECTS_DIR).resolve())):
+        raise HTTPException(403, "Access denied")
     if not file_path.exists():
         raise HTTPException(404, "File not found")
     return FileResponse(str(file_path), filename=filename)

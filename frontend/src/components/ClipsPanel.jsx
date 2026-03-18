@@ -1,15 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ProgressBar from './ProgressBar';
+import { formatTime } from '../utils/format';
 import {
   detectHighlights, exportClip, listClips,
   getClipDownloadUrl, pollTask,
 } from '../api/client';
-
-function formatTime(s) {
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m}:${sec.toString().padStart(2, '0')}`;
-}
 
 export default function ClipsPanel({ projectName, stages, onSeek }) {
   const [highlights, setHighlights] = useState([]);
@@ -73,6 +68,9 @@ export default function ClipsPanel({ projectName, stages, onSeek }) {
       setClips(clipList);
     } catch (e) { /* no clips yet */ }
   };
+
+  // Auto-load existing clips on mount
+  useEffect(() => { loadClips(); }, []);
 
   if (!hasTranscript) {
     return <p className="text-gray-500 text-sm">Complete transcription first.</p>;
@@ -183,9 +181,7 @@ export default function ClipsPanel({ projectName, stages, onSeek }) {
       )}
 
       {highlights.length === 0 && clips.length === 0 && !processing && (
-        <button onClick={loadClips} className="text-xs text-gray-500 hover:text-gray-300">
-          Load existing clips
-        </button>
+        <p className="text-xs text-gray-500">No clips yet. Use "Find Highlights" to detect clip-worthy moments.</p>
       )}
     </div>
   );

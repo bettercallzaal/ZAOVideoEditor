@@ -3,19 +3,9 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from ..models.schemas import MetadataRequest, MetadataDraft
 from ..services.metadata_gen import generate_description, generate_chapters, generate_tags
-from ..services.whisper_service import load_transcript
+from ..services.project_utils import find_best_transcript as get_best_transcript, PROJECTS_DIR
 
 router = APIRouter(prefix="/api/metadata", tags=["metadata"])
-
-PROJECTS_DIR = Path(__file__).parent.parent.parent / "projects"
-
-
-def get_best_transcript(project_dir: Path) -> dict:
-    for name in ["edited.json", "cleaned.json", "corrected.json", "raw.json"]:
-        path = project_dir / "transcripts" / name
-        if path.exists():
-            return load_transcript(str(path))
-    raise HTTPException(404, "No transcript found")
 
 
 @router.post("/generate")

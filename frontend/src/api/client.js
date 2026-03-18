@@ -79,8 +79,12 @@ export const uploadOutro = async (name, file) => {
   return res.json();
 };
 
-export const getVideoUrl = (name, stage = 'source') =>
-  `${BASE}/serve-video/${encodeURIComponent(name)}/${stage === 'captioned' ? 'processing/captioned.mp4' : stage === 'assembled' ? 'processing/assembled.mp4' : 'input/main.mp4'}`;
+export const getVideoUrl = (name, stage = 'source') => {
+  if (stage === 'captioned') return `${BASE}/serve-video/${encodeURIComponent(name)}/processing/captioned.mp4`;
+  if (stage === 'assembled') return `${BASE}/serve-video/${encodeURIComponent(name)}/processing/assembled.mp4`;
+  // For source, we don't know the extension — use the dynamic endpoint
+  return `${BASE}/projects/${encodeURIComponent(name)}/video-stream?stage=${stage}`;
+};
 
 // --- Assembly (background task) ---
 export const assembleVideo = (projectName, useIntro = false, useOutro = false) =>
@@ -276,6 +280,16 @@ export const listClips = (projectName) =>
 
 export const getClipDownloadUrl = (projectName, filename) =>
   `${BASE}/clips/${encodeURIComponent(projectName)}/download/${encodeURIComponent(filename)}`;
+
+// --- YouTube ---
+export const getYouTubeInfo = (url) =>
+  request('/youtube/info', { method: 'POST', body: JSON.stringify({ url }) });
+
+export const youtubeTranscribe = (url, projectName, quality = 'standard') =>
+  request('/youtube/transcribe', {
+    method: 'POST',
+    body: JSON.stringify({ url, project_name: projectName, quality }),
+  });
 
 // --- AI Tools: Tier 1 (CPU) ---
 export const upscaleVideo = (projectName, scale = 2) =>
