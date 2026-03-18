@@ -1,25 +1,31 @@
 import { useState, useEffect } from 'react';
 import ProjectList from './components/ProjectList';
 import Workspace from './components/Workspace';
+import StandalonePage from './StandalonePage';
 import { listProjects, createProject, deleteProject } from './api/client';
 
 export default function App() {
   const [projects, setProjects] = useState([]);
   const [currentProject, setCurrentProject] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [standalone, setStandalone] = useState(false);
 
   const refreshProjects = async () => {
     try {
       const data = await listProjects();
       setProjects(data);
     } catch (e) {
-      console.error('Failed to load projects:', e);
+      // If backend is unreachable, switch to standalone YouTube-only mode
+      console.error('Backend not available, switching to standalone mode');
+      setStandalone(true);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => { refreshProjects(); }, []);
+
+  if (standalone) return <StandalonePage />;
 
   const handleCreate = async (name) => {
     try {

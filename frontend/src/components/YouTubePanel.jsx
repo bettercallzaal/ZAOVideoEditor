@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import ProgressBar from './ProgressBar';
 import { formatTime } from '../utils/format';
-import { getYouTubeInfo, youtubeTranscribe, pollTask, getCurrentTranscript } from '../api/client';
 
-export default function YouTubePanel({ projectName, stages, onComplete }) {
+export default function YouTubePanel({ projectName, stages, onComplete, standalone = false }) {
   const [url, setUrl] = useState('');
   const [videoInfo, setVideoInfo] = useState(null);
   const [quality, setQuality] = useState('standard');
@@ -41,7 +40,6 @@ export default function YouTubePanel({ projectName, stages, onComplete }) {
     const fullText = transcript.segments.map(s => s.text).join('\n');
     const title = videoInfo?.title?.replace(/[^a-zA-Z0-9 _-]/g, '').trim().slice(0, 40) || 'transcript';
 
-    // Split into chunks at line boundaries, respecting the char limit
     const chunks = [];
     let current = '';
     for (const line of fullText.split('\n')) {
@@ -54,52 +52,79 @@ export default function YouTubePanel({ projectName, stages, onComplete }) {
     }
     if (current) chunks.push(current);
 
-    // Download each chunk as a .txt file
     chunks.forEach((chunk, i) => {
       const blob = new Blob([chunk], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
+      const dlUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
+      a.href = dlUrl;
       a.download = `${title}_part${i + 1}_of_${chunks.length}.txt`;
       a.click();
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(dlUrl);
     });
+  };
+
+  // Use Vercel serverless function in standalone mode, FastAPI backend otherwise
+  const fetchTranscript = async () => {
+    if (standalone) {
+      // Direct call to Vercel serverless function
+      const res = await fetch('/api/youtube', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, action: 'transcribe' }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      return data;
+    } else {
+      // Use the existing FastAPI backend with polling
+      const { youtubeTranscribe, pollTask, getCurrentTranscript } = await import('../api/client');
+      const task = await youtubeTranscribe(url, projectName, quality);
+      await pollTask(task.task_id, (t) => {
+        setProgress(t.progress);
+        if (t.message) setProgressStatus(t.message);
+      }, 2000);
+      const data = await getCurrentTranscript(projectName);
+      return data;
+    }
   };
 
   const handleFetchInfo = async () => {
     if (!url.trim()) return;
     setError('');
     setVideoInfo(null);
-    try {
-      const info = await getYouTubeInfo(url);
-      setVideoInfo(info);
-    } catch (e) {
-      setError(e.message);
+    setTranscript(null);
+
+    if (standalone) {
+      // In standalone mode, just validate and show URL
+      try {
+        const match = url.match(/(?:v=|\/v\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+        if (!match) throw new Error('Invalid YouTube URL');
+        setVideoInfo({ title: 'YouTube Video', video_id: match[1], duration: 0 });
+      } catch (e) {
+        setError(e.message);
+      }
+    } else {
+      try {
+        const { getYouTubeInfo } = await import('../api/client');
+        const info = await getYouTubeInfo(url);
+        setVideoInfo(info);
+      } catch (e) {
+        setError(e.message);
+      }
     }
   };
 
   const handleTranscribe = async () => {
     setProcessing(true);
     setError('');
-    setProgress(5);
-    setProgressStatus('Starting YouTube transcription...');
+    setProgress(standalone ? 50 : 5);
+    setProgressStatus(standalone ? 'Fetching YouTube captions...' : 'Starting YouTube transcription...');
     try {
-      const task = await youtubeTranscribe(url, projectName, quality);
-      const result = await pollTask(task.task_id, (t) => {
-        setProgress(t.progress);
-        if (t.message) setProgressStatus(t.message);
-      }, 2000);
+      const data = await fetchTranscript();
+      setTranscript(data);
       setProgress(100);
-      setProgressStatus(result.result?.source === 'youtube_captions'
-        ? `Got ${result.result.segment_count} segments from YouTube captions`
-        : `Transcribed ${result.result.segment_count} segments with faster-whisper`
-      );
-      // Load the transcript
-      try {
-        const data = await getCurrentTranscript(projectName);
-        setTranscript(data);
-      } catch { /* ok */ }
-      onComplete();
+      setProgressStatus(`Got ${data.segments?.length || data.segment_count} segments`);
+      if (onComplete) onComplete();
     } catch (e) {
       setError(e.message);
       setProgressStatus('Failed');
@@ -148,29 +173,27 @@ export default function YouTubePanel({ projectName, stages, onComplete }) {
         <div className="bg-[#1a1f2e] rounded p-4 space-y-3">
           <h3 className="text-sm font-medium text-white">{videoInfo.title}</h3>
           <div className="flex gap-4 text-xs text-gray-400">
-            <span>{videoInfo.channel}</span>
-            <span>{formatDuration(videoInfo.duration)}</span>
-            {videoInfo.was_live && (
-              <span className="text-orange-400">Was Live</span>
-            )}
-            {videoInfo.view_count > 0 && (
-              <span>{videoInfo.view_count.toLocaleString()} views</span>
-            )}
+            {videoInfo.channel && <span>{videoInfo.channel}</span>}
+            {videoInfo.duration > 0 && <span>{formatDuration(videoInfo.duration)}</span>}
+            {videoInfo.was_live && <span className="text-orange-400">Was Live</span>}
+            {videoInfo.view_count > 0 && <span>{videoInfo.view_count.toLocaleString()} views</span>}
           </div>
 
           <div className="flex gap-3 items-end">
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Quality</label>
-              <select
-                value={quality}
-                onChange={(e) => setQuality(e.target.value)}
-                className="bg-[#0f1419] border border-gray-700 rounded px-2 py-1.5 text-sm text-white"
-              >
-                <option value="fast">Fast (base model)</option>
-                <option value="standard">Standard (large model)</option>
-                <option value="high">High (3-pass)</option>
-              </select>
-            </div>
+            {!standalone && (
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Quality</label>
+                <select
+                  value={quality}
+                  onChange={(e) => setQuality(e.target.value)}
+                  className="bg-[#0f1419] border border-gray-700 rounded px-2 py-1.5 text-sm text-white"
+                >
+                  <option value="fast">Fast (base model)</option>
+                  <option value="standard">Standard (large model)</option>
+                  <option value="high">High (3-pass)</option>
+                </select>
+              </div>
+            )}
             {!processing && (
               <button
                 onClick={handleTranscribe}
