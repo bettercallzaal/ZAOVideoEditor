@@ -35,11 +35,9 @@ export default function YouTubePanel({ projectName, stages, onComplete, standalo
 
   const CHAR_LIMIT = 49000;
 
-  const downloadChunkedFiles = () => {
-    if (!transcript?.segments?.length) return;
+  const buildTranscriptChunks = () => {
+    if (!transcript?.segments?.length) return [];
     const fullText = transcript.segments.map(s => s.text).join('\n');
-    const title = videoInfo?.title?.replace(/[^a-zA-Z0-9 _-]/g, '').trim().slice(0, 40) || 'transcript';
-
     const chunks = [];
     let current = '';
     for (const line of fullText.split('\n')) {
@@ -51,15 +49,37 @@ export default function YouTubePanel({ projectName, stages, onComplete, standalo
       }
     }
     if (current) chunks.push(current);
+    return chunks;
+  };
 
+  const getTitle = () =>
+    videoInfo?.title?.replace(/[^a-zA-Z0-9 _-]/g, '').trim().slice(0, 40) || 'transcript';
+
+  const downloadBlob = (content, name) => {
+    const blob = new Blob([content], { type: 'text/plain' });
+    const dlUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = dlUrl;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(dlUrl);
+  };
+
+  const downloadPart = (index) => {
+    const chunks = buildTranscriptChunks();
+    if (!chunks[index]) return;
+    const title = getTitle();
+    downloadBlob(chunks[index], `${title}_part${index + 1}_of_${chunks.length}.txt`);
+  };
+
+  const downloadAllParts = () => {
+    const chunks = buildTranscriptChunks();
+    if (!chunks.length) return;
+    const title = getTitle();
     chunks.forEach((chunk, i) => {
-      const blob = new Blob([chunk], { type: 'text/plain' });
-      const dlUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = dlUrl;
-      a.download = `${title}_part${i + 1}_of_${chunks.length}.txt`;
-      a.click();
-      URL.revokeObjectURL(dlUrl);
+      setTimeout(() => {
+        downloadBlob(chunk, `${title}_part${i + 1}_of_${chunks.length}.txt`);
+      }, i * 300);
     });
   };
 
@@ -224,7 +244,7 @@ export default function YouTubePanel({ projectName, stages, onComplete, standalo
                       {totalChars.toLocaleString()} chars
                     </span>
                   </h3>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
                     {copied && <span className="text-xs text-green-400">Copied!</span>}
                     <button
                       onClick={handleCopyAll}
@@ -238,11 +258,20 @@ export default function YouTubePanel({ projectName, stages, onComplete, standalo
                     >
                       Copy + Timestamps
                     </button>
+                    {numParts > 1 && Array.from({ length: numParts }, (_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => downloadPart(i)}
+                        className="text-xs bg-[#1a1f2e] border border-[#e0ddaa]/40 text-[#e0ddaa] px-2.5 py-1 rounded hover:bg-[#e0ddaa]/10"
+                      >
+                        Part {i + 1}
+                      </button>
+                    ))}
                     <button
-                      onClick={downloadChunkedFiles}
+                      onClick={downloadAllParts}
                       className="text-xs bg-[#e0ddaa] text-[#141e27] px-2.5 py-1 rounded font-medium hover:bg-[#d4d19e]"
                     >
-                      Download .txt ({numParts} {numParts === 1 ? 'file' : 'files'})
+                      {numParts > 1 ? `Download All ${numParts} Parts` : 'Download .txt'}
                     </button>
                   </div>
                 </div>
