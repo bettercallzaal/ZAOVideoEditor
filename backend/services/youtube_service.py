@@ -169,6 +169,7 @@ def transcribe_youtube(video_id: str, project_dir: str, quality: str = 'standard
         result = transcribe_audio(
             audio_path,
             model_size=model_size,
+            quality=quality,
             on_progress=lambda stage, pct, msg: on_progress(40 + int(pct * 0.5), msg) if on_progress else None,
         )
 

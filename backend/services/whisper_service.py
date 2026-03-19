@@ -81,7 +81,7 @@ def _run_single_pass(model, audio_path: str, config: dict, on_progress=None) -> 
             "end": round(segment.end, 3),
             "text": segment.text.strip(),
             "words": words,
-            "avg_logprob": round(segment.avg_log_prob, 4) if segment.avg_log_prob else 0,
+            "avg_logprob": round(segment.avg_logprob, 4) if segment.avg_logprob else 0,
             "no_speech_prob": round(segment.no_speech_prob, 4) if segment.no_speech_prob else 0,
         }
         segments.append(seg_data)

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import ProjectList from './components/ProjectList';
 import Workspace from './components/Workspace';
 import StandalonePage from './StandalonePage';
+import TextSplitterPage from './TextSplitterPage';
 import { listProjects, createProject, deleteProject } from './api/client';
 
 export default function App() {
@@ -9,6 +10,7 @@ export default function App() {
   const [currentProject, setCurrentProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [standalone, setStandalone] = useState(false);
+  const [page, setPage] = useState('home'); // 'home' | 'text-splitter'
 
   const refreshProjects = async () => {
     try {
@@ -26,6 +28,7 @@ export default function App() {
   useEffect(() => { refreshProjects(); }, []);
 
   if (standalone) return <StandalonePage />;
+  if (page === 'text-splitter') return <TextSplitterPage onBack={() => setPage('home')} />;
 
   const handleCreate = async (name) => {
     try {
@@ -53,9 +56,17 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#0f1419]">
-      <header className="border-b border-gray-800 px-6 py-4">
-        <h1 className="text-2xl font-bold text-[#e0ddaa]">ZAO Video Editor</h1>
-        <p className="text-sm text-gray-400 mt-1">Local video processing for conversation-based content</p>
+      <header className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-[#e0ddaa]">ZAO Video Editor</h1>
+          <p className="text-sm text-gray-400 mt-1">Local video processing for conversation-based content</p>
+        </div>
+        <button
+          onClick={() => setPage('text-splitter')}
+          className="text-sm text-gray-400 hover:text-[#e0ddaa] border border-gray-700 px-3 py-1.5 rounded hover:border-[#e0ddaa]"
+        >
+          Text Splitter
+        </button>
       </header>
       <main className="max-w-4xl mx-auto p-6">
         {loading ? (
