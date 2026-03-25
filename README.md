@@ -234,6 +234,7 @@ ZAOVideoEditor/
 The default view. Video player on the left, tabbed panels on the right:
 
 - **Upload** — add main video, select engine + quality, optional intro/outro, optional silence removal, run assemble + transcribe
+- **YouTube** — paste a YouTube URL, fetch video info, grab transcript (3-tier: instant captions → subtitle extraction → Whisper fallback)
 - **Transcript** — correct, clean, edit, save, add dictionary entries, detect speakers, find/remove fillers
 - **Captions** — pick from 6 styles, select renderer, generate, preview SRT/ASS, burn into video
 - **Clips** — detect highlight moments, export clips (landscape or vertical 9:16 for Shorts/Reels)
@@ -420,6 +421,67 @@ Automated pre-export validation, shown in the Export tab:
 
 Calculates a percentage score with color-coded progress bar (red/yellow/green).
 
+### YouTube Transcript Grabber
+
+Grab transcripts directly from YouTube videos instead of uploading and transcribing locally. Uses a **three-tier approach**, fastest first:
+
+| Tier | Method | Speed | When It's Used |
+|------|--------|-------|---------------|
+| 1 | **youtube-transcript-api** | ~0.5 seconds | Fetches YouTube's existing auto-generated captions directly. Tries `en`, `en-US`, `en-GB`, then any language. |
+| 2 | **yt-dlp subtitle extraction** | ~3-5 seconds | Downloads just the subtitle file (no video/audio). Parses json3, SRT, or VTT formats. |
+| 3 | **faster-whisper** (local) | Minutes to hours | Downloads audio and transcribes locally. Only used when the video has zero captions. |
+
+For most public YouTube videos, Tier 1 returns the full transcript in under a second. Tier 3 (Whisper) is the last resort.
+
+#### Why a video might have no auto-captions
+
+YouTube auto-generates captions for most videos, but several things can block it:
+
+| Blocker | Why | Fix |
+|---------|-----|-----|
+| **Category = Music** | YouTube assumes music content has no useful speech, skips captioning entirely | Change to "People & Blogs" or "Entertainment" |
+| **Visibility = Private** | Private videos are lowest priority in the caption processing queue, may never get processed | Change to Unlisted (only link-holders can see it) — captions persist if you switch back to Private |
+| **Livestream VOD** | Stream recordings are lower priority than standard uploads | Combine with the fixes above and wait 24-48h |
+| **Long duration (2h+)** | Compounds processing delays | Not much you can do — just wait longer |
+| **Low/zero views** | YouTube deprioritizes low-engagement content | Making the video Unlisted/Public helps |
+
+These blockers **stack** — a private, music-category, 2h livestream VOD hits all four. Fix the category and visibility first.
+
+#### How to get YouTube to generate captions for your videos
+
+**Per-video (YouTube Studio > Content > select video):**
+1. **Advanced settings** → Change **Category** from "Music" to "People & Blogs"
+2. **Basic info** → Change **Visibility** from "Private" to "Unlisted" or "Public"
+3. Save and wait 24-48 hours for YouTube to process
+
+**Channel-wide (YouTube Studio > Settings):**
+1. **Upload defaults** → **Advanced settings** → Set default **Video language** to English
+2. Set default **Category** to "People & Blogs" (not Music)
+3. Automatic captions are enabled by default at the channel level
+
+**Nudge processing:** After changing settings, edit the video description (add a word, save) to bump it in YouTube's processing queue.
+
+**Upload your own captions:** If auto-captions never appear, you can upload an SRT file:
+- YouTube Studio → select video → **Subtitles** → **ADD** → **Upload file** → select the `.srt` from your ZAO export
+- Or use **Auto-sync**: paste plain transcript text and YouTube aligns the timing automatically
+
+#### Standalone Text Splitter + YouTube Grabber
+
+The app also includes a standalone tools page (deployed to Vercel) with two modes:
+- **Paste Text** — paste any text and download it split into 49k character .txt files
+- **YouTube Transcript** — grab a YouTube transcript and download it split into 49k character .txt files
+
+The Vercel deployment uses a Python serverless function (`api/youtube.py`) for transcript fetching. **Note:** YouTube blocks most cloud provider IPs (Vercel, AWS, etc.), so the YouTube feature works best locally. Run `./start.sh` to use it from your local machine.
+
+#### Cloud IP blocking
+
+YouTube blocks transcript requests from cloud provider IPs (Vercel, AWS, GCP, Azure). This affects Tier 1 and Tier 2. Workarounds:
+- **Run locally** — residential IPs are not blocked. This is the recommended approach.
+- **Proxy** — `youtube-transcript-api` v1.0+ supports `WebshareProxyConfig` for rotating residential proxies (requires paid Webshare "Residential" plan)
+- **Cookies** — not recommended, YouTube will eventually ban the authenticated account
+
+---
+
 ### Stage Re-runs
 
 Each stage writes intermediate files. You can re-run any stage independently:
@@ -512,6 +574,8 @@ All under `/api/`. Full interactive docs at `http://localhost:8000/docs`.
 | POST | `/api/clips/export` | Export clip as video (background task) |
 | GET | `/api/clips/{name}/list` | List exported clips |
 | GET | `/api/clips/{name}/download/{file}` | Download exported clip |
+| POST | `/api/youtube/info` | Get YouTube video metadata |
+| POST | `/api/youtube/transcribe` | Grab YouTube transcript (3-tier: captions → subtitles → whisper) |
 | GET | `/api/tasks/{task_id}` | Poll background task status |
 | GET | `/api/tasks/project/{name}` | Get all tasks for a project |
 
