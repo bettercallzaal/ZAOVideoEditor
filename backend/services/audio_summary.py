@@ -50,6 +50,9 @@ RECAP:
 
     raw = response.choices[0].message.content.strip()
 
+    # Strip <think> blocks from reasoning models like qwen3
+    raw = re.sub(r'<think>[\s\S]*?</think>\s*', '', raw)
+
     # Strip markdown fences if present
     if raw.startswith("```"):
         raw = re.sub(r'^```(?:json)?\s*', '', raw)

@@ -138,7 +138,7 @@ async def polish_with_llm(req: CleanupRequest):
 
     # Gather dictionary terms for context
     dictionary = load_dictionary()
-    terms = [entry["correct"] for entry in dictionary]
+    terms = list(set(dictionary.get("corrections", {}).values()))
 
     try:
         polished_segments = polish_transcript(segments, terms)

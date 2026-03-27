@@ -96,7 +96,14 @@ def apply_fuzzy_corrections(text: str, threshold: float = 80.0) -> str:
             else:
                 i += 1
 
-    # --- Pass 2: Check individual words against single-word keys ---
+    # --- Pass 2: Check individual words against single-word keys AND
+    #     collapsed multi-word keys (e.g., "saltorias" vs "sal torius" → "saltorius") ---
+    all_keys = dict(single_keys)
+    # Add collapsed versions of multi-word keys for single-word fuzzy matching
+    for key, correct in multi_keys.items():
+        collapsed = key.replace(" ", "")
+        all_keys[collapsed] = correct
+
     for i, word in enumerate(words):
         # Strip punctuation for matching but preserve it for reconstruction
         stripped = word.strip('.,!?;:"\'-()[]{}')
@@ -110,7 +117,7 @@ def apply_fuzzy_corrections(text: str, threshold: float = 80.0) -> str:
 
         best_score = 0.0
         best_correction: Optional[str] = None
-        for key, correct in single_keys.items():
+        for key, correct in all_keys.items():
             score = fuzz.ratio(lower, key)
             if score > best_score and score >= threshold:
                 best_score = score

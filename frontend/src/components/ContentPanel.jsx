@@ -19,9 +19,11 @@ export default function ContentPanel({ projectName, stages, onSeek }) {
   const [clipVertical, setClipVertical] = useState(false);
   const [exportAllRunning, setExportAllRunning] = useState(false);
 
-  const hasTranscript = ['raw', 'corrected', 'cleaned', 'edited'].some(
-    s => stages[`transcription`] === 'complete' || stages[`transcript_${s}`]
-  ) || stages.transcription === 'complete';
+  // Backend checks for transcript files directly — we just enable the button
+  // if any transcript-related stage is complete (upload, transcription, youtube)
+  const hasTranscript = stages.transcription === 'complete' ||
+    stages.youtube_transcribe === 'complete' ||
+    stages.upload === 'complete';
 
   // Load existing content on mount
   useEffect(() => {

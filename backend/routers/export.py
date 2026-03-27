@@ -91,6 +91,13 @@ async def create_export_package(req: ExportRequest):
     return {"status": "complete", "files": exported}
 
 
+@router.get("/gdrive-status")
+async def gdrive_status():
+    """Check whether Google Drive credentials are configured."""
+    from ..services.gdrive_service import is_gdrive_configured
+    return {"configured": is_gdrive_configured()}
+
+
 @router.get("/{project_name}/files")
 async def list_export_files(project_name: str):
     """List files in the exports folder."""
@@ -182,13 +189,6 @@ async def export_notebooklm(project_name: str):
         media_type="text/plain",
         headers={"Content-Disposition": f'attachment; filename="{project_name}_notebooklm.txt"'},
     )
-
-
-@router.get("/gdrive-status")
-async def gdrive_status():
-    """Check whether Google Drive credentials are configured."""
-    from ..services.gdrive_service import is_gdrive_configured
-    return {"configured": is_gdrive_configured()}
 
 
 @router.post("/{project_name}/gdrive")
