@@ -4,9 +4,10 @@ import {
   uploadMainVideo, uploadIntro, uploadOutro,
   assembleVideo, transcribe, pollTask,
   getAvailableTools, previewSilenceCuts, removeSilence,
+  getDictionary,
 } from '../api/client';
 
-export default function UploadPanel({ projectName, stages, onComplete }) {
+export default function UploadPanel({ projectName, stages, onComplete, onTranscribed }) {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [useIntro, setUseIntro] = useState(false);
@@ -30,9 +31,12 @@ export default function UploadPanel({ projectName, stages, onComplete }) {
   const introRef = useRef(null);
   const outroRef = useRef(null);
 
-  // Load available tools on mount
+  const [dictCount, setDictCount] = useState(0);
+
+  // Load available tools and dictionary on mount
   useEffect(() => {
     getAvailableTools().then(setTools).catch(() => {});
+    getDictionary().then(d => setDictCount(Object.keys(d.corrections || {}).length)).catch(() => {});
   }, []);
 
   const updateStep = (steps, activeIndex) => {
@@ -68,25 +72,31 @@ export default function UploadPanel({ projectName, stages, onComplete }) {
     }
   };
 
-  const handleIntroUpload = async () => {
-    const file = introRef.current?.files[0];
+  const handleIntroSelect = async (e) => {
+    const file = e.target.files?.[0];
     if (!file) return;
+    setUseIntro(true);
+    setProgressStatus(`Uploading intro: ${file.name}...`);
     try {
       await uploadIntro(projectName, file);
       setIntroUploaded(true);
-    } catch (e) {
-      setError(`Intro upload failed: ${e.message}`);
+      setProgressStatus('');
+    } catch (err) {
+      setError(`Intro upload failed: ${err.message}`);
     }
   };
 
-  const handleOutroUpload = async () => {
-    const file = outroRef.current?.files[0];
+  const handleOutroSelect = async (e) => {
+    const file = e.target.files?.[0];
     if (!file) return;
+    setUseOutro(true);
+    setProgressStatus(`Uploading outro: ${file.name}...`);
     try {
       await uploadOutro(projectName, file);
       setOutroUploaded(true);
-    } catch (e) {
-      setError(`Outro upload failed: ${e.message}`);
+      setProgressStatus('');
+    } catch (err) {
+      setError(`Outro upload failed: ${err.message}`);
     }
   };
 
@@ -172,6 +182,7 @@ export default function UploadPanel({ projectName, stages, onComplete }) {
 
       updateStep(steps, steps.length);
       onComplete();
+      if (onTranscribed) onTranscribed();
     } catch (e) {
       setError(`Processing failed: ${e.message}`);
       setProgressStatus('Failed');
@@ -217,32 +228,34 @@ export default function UploadPanel({ projectName, stages, onComplete }) {
         <ProgressBar progress={uploadProgress} status={progressStatus} />
       )}
 
-      {/* Intro/Outro */}
+      {/* Intro/Outro — auto-uploads on file select */}
       <section>
-        <h3 className="text-sm font-medium text-gray-300 mb-2">Intro / Outro (Optional)</h3>
-        <div className="space-y-3">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={useIntro} onChange={(e) => setUseIntro(e.target.checked)} className="rounded" />
-            <span className="text-sm text-gray-400">Add intro</span>
-          </label>
-          {useIntro && (
-            <div className="flex gap-2 ml-6">
-              <input ref={introRef} type="file" accept=".mp4,.mov,.mkv,.webm" className="flex-1 text-sm text-gray-400 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-gray-700 file:text-gray-300 file:cursor-pointer" />
-              <button onClick={handleIntroUpload} className="text-xs bg-gray-700 px-3 py-1 rounded text-gray-300 hover:bg-gray-600">Upload Intro</button>
-              {introUploaded && <span className="text-green-400 text-xs self-center">Ready</span>}
+        <h3 className="text-sm font-medium text-gray-300 mb-2">Intro / Outro <span className="text-gray-600 font-normal">(optional — select file to add)</span></h3>
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <input
+                ref={introRef}
+                type="file"
+                accept=".mp4,.mov,.mkv,.webm"
+                onChange={handleIntroSelect}
+                className="flex-1 text-sm text-gray-400 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-gray-700 file:text-gray-300 file:cursor-pointer"
+              />
+              {introUploaded && <span className="text-green-400 text-xs shrink-0">Intro ready</span>}
             </div>
-          )}
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={useOutro} onChange={(e) => setUseOutro(e.target.checked)} className="rounded" />
-            <span className="text-sm text-gray-400">Add outro</span>
-          </label>
-          {useOutro && (
-            <div className="flex gap-2 ml-6">
-              <input ref={outroRef} type="file" accept=".mp4,.mov,.mkv,.webm" className="flex-1 text-sm text-gray-400 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-gray-700 file:text-gray-300 file:cursor-pointer" />
-              <button onClick={handleOutroUpload} className="text-xs bg-gray-700 px-3 py-1 rounded text-gray-300 hover:bg-gray-600">Upload Outro</button>
-              {outroUploaded && <span className="text-green-400 text-xs self-center">Ready</span>}
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <input
+                ref={outroRef}
+                type="file"
+                accept=".mp4,.mov,.mkv,.webm"
+                onChange={handleOutroSelect}
+                className="flex-1 text-sm text-gray-400 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-gray-700 file:text-gray-300 file:cursor-pointer"
+              />
+              {outroUploaded && <span className="text-green-400 text-xs shrink-0">Outro ready</span>}
             </div>
-          )}
+          </div>
         </div>
       </section>
 
@@ -366,11 +379,18 @@ export default function UploadPanel({ projectName, stages, onComplete }) {
           <button onClick={handleProcess} className="w-full bg-[#e0ddaa] text-[#141e27] py-3 rounded-lg font-medium hover:bg-[#d4d19e]">
             {removeSilenceEnabled ? 'Assemble + Trim + Transcribe' : 'Assemble + Transcribe'}
           </button>
-          <p className="text-xs text-gray-500 mt-1">
-            {removeSilenceEnabled
-              ? 'Assembles video, removes dead air, extracts audio, and runs local transcription.'
-              : 'Assembles video, extracts audio, and runs local transcription.'}
-          </p>
+          <div className="flex items-center justify-between mt-1">
+            <p className="text-xs text-gray-500">
+              {removeSilenceEnabled
+                ? 'Assembles video, removes dead air, extracts audio, and runs local transcription.'
+                : 'Assembles video, extracts audio, and runs local transcription.'}
+            </p>
+            {dictCount > 0 && (
+              <span className="text-xs text-[#e0ddaa]/60 shrink-0 ml-2">
+                {dictCount} dictionary terms will guide transcription
+              </span>
+            )}
+          </div>
         </section>
       )}
 

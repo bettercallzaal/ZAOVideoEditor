@@ -201,13 +201,14 @@ export default function Workspace({ projectName, onBack }) {
                 projectName={projectName}
                 stages={project.stages}
                 onComplete={handleStageComplete}
+                onTranscribed={() => setActiveTab('transcript')}
               />
             )}
             {activeTab === 'youtube' && (
               <YouTubePanel
                 projectName={projectName}
                 stages={project.stages}
-                onComplete={handleStageComplete}
+                onComplete={() => { handleStageComplete(); setActiveTab('transcript'); }}
               />
             )}
             {activeTab === 'transcript' && (
