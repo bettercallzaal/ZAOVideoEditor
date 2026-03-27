@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import ProjectList from './components/ProjectList';
 import Workspace from './components/Workspace';
+import BatchPanel from './components/BatchPanel';
 import StandalonePage from './StandalonePage';
 import TextSplitterPage from './TextSplitterPage';
 import { listProjects, createProject, deleteProject } from './api/client';
@@ -11,6 +12,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [standalone, setStandalone] = useState(false);
   const [page, setPage] = useState('home'); // 'home' | 'text-splitter'
+  const [showBatch, setShowBatch] = useState(false);
 
   const refreshProjects = async () => {
     try {
@@ -61,14 +63,28 @@ export default function App() {
           <h1 className="text-2xl font-bold text-[#e0ddaa]">ZAO Video Editor</h1>
           <p className="text-sm text-gray-400 mt-1">Local video processing for conversation-based content</p>
         </div>
-        <button
-          onClick={() => setPage('text-splitter')}
-          className="text-sm text-gray-400 hover:text-[#e0ddaa] border border-gray-700 px-3 py-1.5 rounded hover:border-[#e0ddaa]"
-        >
-          Text Splitter
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowBatch(prev => !prev)}
+            className="text-sm text-gray-400 hover:text-[#e0ddaa] border border-gray-700 px-3 py-1.5 rounded hover:border-[#e0ddaa]"
+          >
+            Batch Process
+          </button>
+          <button
+            onClick={() => setPage('text-splitter')}
+            className="text-sm text-gray-400 hover:text-[#e0ddaa] border border-gray-700 px-3 py-1.5 rounded hover:border-[#e0ddaa]"
+          >
+            Text Splitter
+          </button>
+        </div>
       </header>
-      <main className="max-w-4xl mx-auto p-6">
+      <main className="max-w-4xl mx-auto p-6 space-y-6">
+        {showBatch && !loading && (
+          <BatchPanel
+            projects={projects}
+            onClose={() => setShowBatch(false)}
+          />
+        )}
         {loading ? (
           <p className="text-gray-400">Loading...</p>
         ) : (

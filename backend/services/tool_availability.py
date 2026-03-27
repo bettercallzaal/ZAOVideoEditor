@@ -1,10 +1,15 @@
 """Check which optional tools are installed. Results cached at startup."""
 
+import os
+
 _cache = {}
 
 
+_NO_CACHE_TOOLS = {"groq"}  # env-var based checks should not be cached
+
+
 def check_tool(name: str) -> bool:
-    if name in _cache:
+    if name not in _NO_CACHE_TOOLS and name in _cache:
         return _cache[name]
 
     available = False
@@ -68,6 +73,8 @@ def check_tool(name: str) -> bool:
         elif name == "torch_gpu":
             import torch
             available = torch.cuda.is_available()
+        elif name == "groq":
+            available = bool(os.environ.get("GROQ_API_KEY", "").strip())
     except Exception:
         pass
 
@@ -78,7 +85,7 @@ def check_tool(name: str) -> bool:
 def get_available_tools() -> dict:
     """Return availability of all optional tools, grouped by tier."""
     # Original pipeline tools
-    pipeline = ["whisperx", "stable_ts", "auto_editor", "pycaps", "moviepy"]
+    pipeline = ["whisperx", "stable_ts", "auto_editor", "pycaps", "moviepy", "groq"]
 
     # Tier 1: CPU-friendly
     tier1 = ["realesrgan", "rembg", "scenedetect", "denoiser"]

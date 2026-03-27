@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import ProgressBar from './ProgressBar';
 import SeoChecklist from './SeoChecklist';
 import StoragePanel from './StoragePanel';
-import { createExportPackage, listExportFiles, getExportDownloadUrl } from '../api/client';
+import { createExportPackage, listExportFiles, getExportDownloadUrl, getNotebookLMDownloadUrl, getNotebookLMText, getGDriveStatus, uploadToGDrive } from '../api/client';
 
 export default function ExportPanel({ projectName, stages, onComplete }) {
   const [files, setFiles] = useState([]);
@@ -10,6 +10,10 @@ export default function ExportPanel({ projectName, stages, onComplete }) {
   const [progress, setProgress] = useState(0);
   const [progressStatus, setProgressStatus] = useState('');
   const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [gdriveAvailable, setGdriveAvailable] = useState(false);
+  const [gdriveUploading, setGdriveUploading] = useState(false);
+  const [gdriveResult, setGdriveResult] = useState(null);
 
   const loadFiles = async () => {
     try {
@@ -20,7 +24,12 @@ export default function ExportPanel({ projectName, stages, onComplete }) {
     }
   };
 
-  useEffect(() => { loadFiles(); }, []);
+  useEffect(() => {
+    loadFiles();
+    getGDriveStatus()
+      .then((res) => setGdriveAvailable(res.configured))
+      .catch(() => setGdriveAvailable(false));
+  }, []);
 
   const handleExport = async () => {
     setExporting(true);
@@ -62,6 +71,82 @@ export default function ExportPanel({ projectName, stages, onComplete }) {
       <p className="text-xs text-gray-500">
         Packages all available outputs: video, captions (SRT/ASS), transcript, and metadata files.
       </p>
+
+      {/* NotebookLM export */}
+      <div className="flex gap-2">
+        <a
+          href={getNotebookLMDownloadUrl(projectName)}
+          className="flex-1 text-center bg-gray-700 text-gray-300 px-4 py-2 rounded-lg text-sm hover:bg-gray-600"
+        >
+          Export for NotebookLM
+        </a>
+        <button
+          onClick={async () => {
+            try {
+              const text = await getNotebookLMText(projectName);
+              await navigator.clipboard.writeText(text);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            } catch (e) {
+              setError(`Copy failed: ${e.message}`);
+            }
+          }}
+          className="flex-1 bg-gray-700 text-gray-300 px-4 py-2 rounded-lg text-sm hover:bg-gray-600"
+        >
+          {copied ? 'Copied!' : 'Copy for NotebookLM'}
+        </button>
+      </div>
+      <p className="text-xs text-gray-500">
+        Formatted plain-text transcript with timestamps, optimized for Google NotebookLM.
+      </p>
+
+      {/* Google Drive upload */}
+      {gdriveAvailable && (
+        <div className="space-y-2">
+          <button
+            onClick={async () => {
+              setGdriveUploading(true);
+              setGdriveResult(null);
+              setError('');
+              try {
+                const result = await uploadToGDrive(projectName);
+                setGdriveResult(result);
+              } catch (e) {
+                setError(`Google Drive upload failed: ${e.message}`);
+              } finally {
+                setGdriveUploading(false);
+              }
+            }}
+            disabled={gdriveUploading}
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-500 disabled:opacity-50 w-full"
+          >
+            {gdriveUploading ? 'Uploading to Google Drive...' : 'Upload to Google Drive'}
+          </button>
+          <p className="text-xs text-gray-500">
+            Uploads transcripts, captions, and metadata to Google Drive under "ZAO Transcripts/{projectName}/".
+          </p>
+          {gdriveResult && gdriveResult.files && gdriveResult.files.length > 0 && (
+            <div className="space-y-1">
+              <h4 className="text-sm font-medium text-gray-300">Uploaded to Drive</h4>
+              {gdriveResult.files.map((f) => (
+                <div key={f.id} className="flex items-center justify-between bg-[#1a1f2e] rounded px-3 py-2">
+                  <span className="text-sm text-gray-300">{f.name}</span>
+                  {f.link && (
+                    <a
+                      href={f.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-[#e0ddaa] hover:underline"
+                    >
+                      Open in Drive
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Progress */}
       {(exporting || progress > 0) && (

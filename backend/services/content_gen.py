@@ -146,6 +146,81 @@ TRANSCRIPT:
     return result
 
 
+def polish_transcript(segments: list, dictionary_terms: list[str] = None) -> list:
+    """Use LLM to fix misspelled names, brands, and proper nouns in transcript segments.
+
+    Processes segments in chunks of 25 to stay within context limits.
+    Returns corrected segments in the same format.
+    """
+    client, model = _get_client()
+    if not client:
+        raise RuntimeError(
+            "No LLM available. Ensure Ollama is running, or set OPENAI_API_KEY or GROQ_API_KEY."
+        )
+
+    terms_str = ", ".join(dictionary_terms) if dictionary_terms else "none provided"
+    chunk_size = 25
+    polished = []
+
+    for i in range(0, len(segments), chunk_size):
+        chunk = segments[i:i + chunk_size]
+
+        # Build a compact representation for the LLM
+        chunk_data = []
+        for seg in chunk:
+            chunk_data.append({
+                "id": seg["id"],
+                "text": seg["text"],
+                "speaker": seg.get("speaker", ""),
+            })
+
+        prompt = f"""Fix any misspelled names, brands, proper nouns, or obvious transcription errors in these transcript segments.
+
+Known correct spellings: {terms_str}
+
+Rules:
+- Only fix spelling/transcription errors. Do NOT change meaning, rephrase, or add content.
+- If a segment looks correct, return it unchanged.
+- Return ONLY a JSON array of objects with "id" and "text" fields (same ids as input).
+- Do not include markdown fences or any text outside the JSON array.
+
+Input segments:
+{json.dumps(chunk_data, indent=2)}"""
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=4096,
+        )
+
+        raw = response.choices[0].message.content.strip()
+
+        # Strip markdown fences if present
+        if raw.startswith("```"):
+            raw = re.sub(r'^```(?:json)?\s*', '', raw)
+            raw = re.sub(r'\s*```$', '', raw)
+
+        # Strip <think> blocks from reasoning models like qwen3
+        raw = re.sub(r'<think>[\s\S]*?</think>\s*', '', raw)
+
+        try:
+            corrections = json.loads(raw)
+            # Build lookup of corrections by id
+            correction_map = {c["id"]: c["text"] for c in corrections}
+
+            for seg in chunk:
+                corrected_seg = dict(seg)
+                if seg["id"] in correction_map:
+                    corrected_seg["text"] = correction_map[seg["id"]]
+                polished.append(corrected_seg)
+        except (json.JSONDecodeError, KeyError):
+            # If LLM returned bad JSON, keep original segments for this chunk
+            polished.extend(chunk)
+
+    return polished
+
+
 def _parse_timestamp(ts: str) -> float:
     """Parse MM:SS or HH:MM:SS to seconds."""
     parts = ts.split(":")

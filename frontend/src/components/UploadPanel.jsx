@@ -4,7 +4,7 @@ import {
   uploadMainVideo, uploadIntro, uploadOutro,
   assembleVideo, transcribe, pollTask,
   getAvailableTools, previewSilenceCuts, removeSilence,
-  getDictionary,
+  getDictionary, listTemplates, saveTemplate, deleteTemplate,
 } from '../api/client';
 
 export default function UploadPanel({ projectName, stages, onComplete, onTranscribed }) {
@@ -32,12 +32,63 @@ export default function UploadPanel({ projectName, stages, onComplete, onTranscr
   const outroRef = useRef(null);
 
   const [dictCount, setDictCount] = useState(0);
+  const [templates, setTemplates] = useState({});
+  const [savePresetName, setSavePresetName] = useState('');
+  const [showSavePreset, setShowSavePreset] = useState(false);
 
-  // Load available tools and dictionary on mount
+  // Load available tools, dictionary, and templates on mount
   useEffect(() => {
     getAvailableTools().then(setTools).catch(() => {});
     getDictionary().then(d => setDictCount(Object.keys(d.corrections || {}).length)).catch(() => {});
+    listTemplates().then(setTemplates).catch(() => {});
   }, []);
+
+  const handleLoadTemplate = (name) => {
+    const tpl = templates[name];
+    if (!tpl) return;
+    if (tpl.quality) setQuality(tpl.quality);
+    if (tpl.engine) setEngine(tpl.engine);
+    if (tpl.refine_timestamps !== undefined) setRefineTimestamps(tpl.refine_timestamps);
+    if (tpl.remove_silence !== undefined) setRemoveSilenceEnabled(tpl.remove_silence);
+    if (tpl.silence_margin !== undefined) setSilenceMargin(tpl.silence_margin);
+    if (tpl.silence_threshold !== undefined) setSilenceThreshold(tpl.silence_threshold);
+    if (tpl.use_intro !== undefined) setUseIntro(tpl.use_intro);
+    if (tpl.use_outro !== undefined) setUseOutro(tpl.use_outro);
+  };
+
+  const handleSaveTemplate = async () => {
+    const name = savePresetName.trim();
+    if (!name) return;
+    const settings = {
+      quality,
+      engine,
+      refine_timestamps: refineTimestamps,
+      remove_silence: removeSilenceEnabled,
+      silence_margin: silenceMargin,
+      silence_threshold: silenceThreshold,
+      use_intro: useIntro,
+      use_outro: useOutro,
+    };
+    try {
+      await saveTemplate(name, settings);
+      const updated = await listTemplates();
+      setTemplates(updated);
+      setSavePresetName('');
+      setShowSavePreset(false);
+    } catch (e) {
+      setError(`Failed to save preset: ${e.message}`);
+    }
+  };
+
+  const handleDeleteTemplate = async (name) => {
+    try {
+      await deleteTemplate(name);
+      const updated = await listTemplates();
+      setTemplates(updated);
+    } catch (e) {
+      setError(`Failed to delete preset: ${e.message}`);
+    }
+  };
 
   const updateStep = (steps, activeIndex) => {
     setSubsteps(steps.map((label, i) => ({
@@ -193,12 +244,78 @@ export default function UploadPanel({ projectName, stages, onComplete, onTranscr
 
   const engineLabel = (e) => {
     if (e === 'auto') return tools.whisperx ? 'Auto (WhisperX)' : 'Auto (faster-whisper)';
+    if (e === 'groq') return 'Groq Cloud';
     if (e === 'whisperx') return 'WhisperX';
     return 'faster-whisper';
   };
 
   return (
     <div className="space-y-6">
+      {/* Presets */}
+      {(Object.keys(templates).length > 0 || showSavePreset) && (
+        <section className="bg-[#1a1f2e] rounded-lg p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wide">Presets</h3>
+            <button
+              onClick={() => setShowSavePreset(prev => !prev)}
+              className="text-[10px] text-[#e0ddaa] hover:underline"
+            >
+              {showSavePreset ? 'Cancel' : 'Save current as preset'}
+            </button>
+          </div>
+          {Object.keys(templates).length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {Object.keys(templates).map(name => (
+                <div key={name} className="flex items-center gap-0.5">
+                  <button
+                    onClick={() => handleLoadTemplate(name)}
+                    className="text-xs bg-gray-700 text-gray-200 px-2.5 py-1 rounded-l hover:bg-gray-600 font-medium"
+                  >
+                    {name}
+                  </button>
+                  <button
+                    onClick={() => handleDeleteTemplate(name)}
+                    className="text-xs bg-gray-700 text-gray-500 px-1.5 py-1 rounded-r hover:bg-red-900/50 hover:text-red-300"
+                    title={`Delete "${name}" preset`}
+                  >
+                    x
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {showSavePreset && (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={savePresetName}
+                onChange={(e) => setSavePresetName(e.target.value)}
+                placeholder="Preset name..."
+                className="flex-1 bg-[#0f1419] border border-gray-700 rounded px-2 py-1 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-[#e0ddaa]"
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveTemplate()}
+              />
+              <button
+                onClick={handleSaveTemplate}
+                disabled={!savePresetName.trim()}
+                className="text-xs bg-[#e0ddaa] text-[#141e27] px-3 py-1 rounded font-medium hover:bg-[#d4d19e] disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Save preset button when no presets exist yet */}
+      {Object.keys(templates).length === 0 && !showSavePreset && stages.upload === 'complete' && !processing && (
+        <button
+          onClick={() => setShowSavePreset(true)}
+          className="text-xs text-gray-500 hover:text-[#e0ddaa]"
+        >
+          Save current settings as a preset...
+        </button>
+      )}
+
       {/* Main video upload */}
       <section>
         <h3 className="text-sm font-medium text-gray-300 mb-2">Main Video</h3>
@@ -360,6 +477,7 @@ export default function UploadPanel({ projectName, stages, onComplete, onTranscr
                 <option value="auto">{engineLabel('auto')}</option>
                 <option value="faster-whisper">faster-whisper</option>
                 {tools.whisperx && <option value="whisperx">WhisperX (better word timing)</option>}
+                {tools.groq && <option value="groq">Groq Cloud (fast)</option>}
               </select>
             </div>
             {tools.stable_ts && (

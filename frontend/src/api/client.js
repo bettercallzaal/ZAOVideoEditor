@@ -130,6 +130,12 @@ export const cleanupTranscript = (projectName) =>
 export const getCurrentTranscript = (projectName) =>
   request(`/transcript/${encodeURIComponent(projectName)}/current`);
 
+export const polishTranscript = (projectName) =>
+  request('/transcript/polish', {
+    method: 'POST',
+    body: JSON.stringify({ project_name: projectName }),
+  });
+
 export const saveTranscriptEdit = (projectName, segments) =>
   request('/transcript/save-edit', {
     method: 'POST',
@@ -221,6 +227,26 @@ export const listExportFiles = (projectName) =>
 export const getExportDownloadUrl = (projectName, filename) =>
   `${BASE}/export/${encodeURIComponent(projectName)}/download/${encodeURIComponent(filename)}`;
 
+export const getNotebookLMDownloadUrl = (projectName) =>
+  `${BASE}/export/${encodeURIComponent(projectName)}/notebooklm`;
+
+export const getNotebookLMText = async (projectName) => {
+  const res = await fetch(`${BASE}/export/${encodeURIComponent(projectName)}/notebooklm-text`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || 'Request failed');
+  }
+  return res.text();
+};
+
+// --- Google Drive ---
+export const getGDriveStatus = () => request('/export/gdrive-status');
+
+export const uploadToGDrive = (projectName) =>
+  request(`/export/${encodeURIComponent(projectName)}/gdrive`, {
+    method: 'POST',
+  });
+
 // --- Storage ---
 export const getProjectStorage = (projectName) =>
   request(`/projects/${encodeURIComponent(projectName)}/storage`);
@@ -301,6 +327,9 @@ export const generateContent = (projectName) =>
 export const getContent = (projectName) =>
   request(`/content/${encodeURIComponent(projectName)}`);
 
+export const generateAudioSummary = (projectName) =>
+  request(`/content/${encodeURIComponent(projectName)}/audio-summary`, { method: 'POST' });
+
 // --- AI Tools: Tier 1 (CPU) ---
 export const upscaleVideo = (projectName, scale = 2) =>
   request('/ai/upscale', { method: 'POST', body: JSON.stringify({ project_name: projectName, scale }) });
@@ -341,3 +370,32 @@ export const mixMusic = (projectName, volume = 0.15) =>
 
 export const generateAiThumbnail = (projectName, prompt) =>
   request('/ai/ai-thumbnail', { method: 'POST', body: JSON.stringify({ project_name: projectName, prompt }) });
+
+// --- Batch Processing ---
+export const batchProcess = (projectNames, options = {}) =>
+  request('/batch/process', {
+    method: 'POST',
+    body: JSON.stringify({
+      project_names: projectNames,
+      quality: options.quality || 'standard',
+      engine: options.engine || 'auto',
+      refine_timestamps: options.refineTimestamps !== false,
+      use_intro: options.useIntro || false,
+      use_outro: options.useOutro || false,
+      generate_content: options.generateContent !== false,
+    }),
+  });
+
+export const getBatchStatus = () => request('/batch/status');
+
+// --- Templates / Presets ---
+export const listTemplates = () => request('/templates');
+
+export const saveTemplate = (name, settings) =>
+  request('/templates', {
+    method: 'POST',
+    body: JSON.stringify({ name, settings }),
+  });
+
+export const deleteTemplate = (name) =>
+  request(`/templates/${encodeURIComponent(name)}`, { method: 'DELETE' });

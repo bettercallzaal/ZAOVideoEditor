@@ -41,7 +41,13 @@ def _do_transcribe(task_id: str, project_dir: Path, model_size: str,
         message=f"Starting {quality} transcription ({actual_engine})...",
     )
 
-    if actual_engine == "whisperx":
+    if actual_engine == "groq":
+        from ..services.groq_service import transcribe_audio_groq
+        transcript_data = transcribe_audio_groq(
+            str(audio_path),
+            on_progress=lambda pct, msg: tm.update_task(task_id, progress=int(pct), message=msg),
+        )
+    elif actual_engine == "whisperx":
         from ..services.whisperx_service import transcribe_audio_whisperx
         transcript_data = transcribe_audio_whisperx(
             str(audio_path),
@@ -103,6 +109,10 @@ def _resolve_engine(engine: str) -> str:
         if check_tool("whisperx"):
             return "whisperx"
         return "faster-whisper"
+    elif engine == "groq":
+        if not check_tool("groq"):
+            return "faster-whisper"  # graceful fallback if no API key
+        return "groq"
     elif engine == "whisperx":
         if not check_tool("whisperx"):
             return "faster-whisper"  # graceful fallback

@@ -7,3 +7,5 @@ dist/
 .env
 *.egg-info/
 .tasks.json
+credentials.json
+token.json

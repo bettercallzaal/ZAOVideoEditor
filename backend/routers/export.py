@@ -1,9 +1,12 @@
 import os
+import json
 import shutil
+from datetime import date
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from ..models.schemas import ExportRequest
+from ..services.whisper_service import load_transcript
 
 router = APIRouter(prefix="/api/export", tags=["export"])
 
@@ -106,3 +109,118 @@ async def download_file(project_name: str, filename: str):
     if not file_path.exists():
         raise HTTPException(404, "File not found")
     return FileResponse(str(file_path), filename=filename)
+
+
+def _get_best_transcript(project_dir: Path) -> tuple[dict, str]:
+    """Return the best available transcript data and its source name."""
+    for name in ["edited.json", "cleaned.json", "corrected.json", "raw.json"]:
+        path = project_dir / "transcripts" / name
+        if path.exists():
+            return load_transcript(str(path)), name
+    return None, None
+
+
+def _format_notebooklm(project_name: str, transcript: dict) -> str:
+    """Format transcript as plain text optimized for NotebookLM ingestion."""
+    segments = transcript.get("segments", [])
+
+    # Calculate duration from last segment
+    duration_str = "Unknown"
+    if segments:
+        last_end = max(seg.get("end", 0) for seg in segments)
+        hours = int(last_end // 3600)
+        minutes = int((last_end % 3600) // 60)
+        seconds = int(last_end % 60)
+        if hours > 0:
+            duration_str = f"{hours}h {minutes}m {seconds}s"
+        else:
+            duration_str = f"{minutes}m {seconds}s"
+
+    lines = []
+    lines.append(f"Title: {project_name}")
+    lines.append(f"Date: {date.today().isoformat()}")
+    lines.append(f"Duration: {duration_str}")
+    lines.append("")
+    lines.append("[TRANSCRIPT]")
+    lines.append("")
+
+    for seg in segments:
+        m = int(seg["start"] // 60)
+        s = int(seg["start"] % 60)
+        timestamp = f"[{m:02d}:{s:02d}]"
+        speaker = seg.get("speaker", "")
+        if speaker:
+            lines.append(f"{timestamp} {speaker}: {seg['text']}")
+        else:
+            lines.append(f"{timestamp} {seg['text']}")
+
+    return "\n".join(lines)
+
+
+@router.post("/{project_name}/notebooklm")
+async def export_notebooklm(project_name: str):
+    """Export transcript as a .txt file optimized for NotebookLM."""
+    project_dir = PROJECTS_DIR / project_name
+    if not project_dir.exists():
+        raise HTTPException(404, "Project not found")
+
+    transcript, source = _get_best_transcript(project_dir)
+    if not transcript:
+        raise HTTPException(404, "No transcript found")
+
+    text = _format_notebooklm(project_name, transcript)
+
+    # Save to exports folder
+    exports_dir = project_dir / "exports"
+    exports_dir.mkdir(exist_ok=True)
+    out_path = exports_dir / f"{project_name}_notebooklm.txt"
+    out_path.write_text(text, encoding="utf-8")
+
+    return FileResponse(
+        str(out_path),
+        filename=f"{project_name}_notebooklm.txt",
+        media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="{project_name}_notebooklm.txt"'},
+    )
+
+
+@router.get("/gdrive-status")
+async def gdrive_status():
+    """Check whether Google Drive credentials are configured."""
+    from ..services.gdrive_service import is_gdrive_configured
+    return {"configured": is_gdrive_configured()}
+
+
+@router.post("/{project_name}/gdrive")
+async def upload_to_gdrive(project_name: str):
+    """Upload transcript/caption/metadata files to Google Drive."""
+    from ..services.gdrive_service import is_gdrive_configured, upload_project_to_drive
+
+    if not is_gdrive_configured():
+        raise HTTPException(400, "Google Drive not configured — place credentials.json in backend/")
+
+    project_dir = PROJECTS_DIR / project_name
+    if not project_dir.exists():
+        raise HTTPException(404, "Project not found")
+
+    try:
+        uploaded = upload_project_to_drive(project_name, str(project_dir))
+    except Exception as e:
+        raise HTTPException(500, f"Google Drive upload failed: {e}")
+
+    return {"status": "complete", "files": uploaded}
+
+
+@router.get("/{project_name}/notebooklm-text")
+async def get_notebooklm_text(project_name: str):
+    """Return the NotebookLM-formatted transcript as plain text (for clipboard copy)."""
+    project_dir = PROJECTS_DIR / project_name
+    if not project_dir.exists():
+        raise HTTPException(404, "Project not found")
+
+    transcript, source = _get_best_transcript(project_dir)
+    if not transcript:
+        raise HTTPException(404, "No transcript found")
+
+    text = _format_notebooklm(project_name, transcript)
+    return PlainTextResponse(text)

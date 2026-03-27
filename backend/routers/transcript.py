@@ -8,6 +8,7 @@ from ..services.dictionary import (
 )
 from ..services.cleanup import cleanup_transcript
 from ..services.whisper_service import load_transcript, save_transcript
+from ..services.content_gen import polish_transcript
 
 router = APIRouter(prefix="/api/transcript", tags=["transcript"])
 
@@ -112,6 +113,46 @@ async def save_edit(req: TranscriptEditRequest):
             pass  # Don't fail the save if learning fails
 
     return {"status": "saved", "segments": len(segments)}
+
+
+@router.post("/polish")
+async def polish_with_llm(req: CleanupRequest):
+    """Use LLM to fix names, brands, and proper nouns the dictionary might miss."""
+    project_dir = PROJECTS_DIR / req.project_name
+    if not project_dir.exists():
+        raise HTTPException(404, "Project not found")
+
+    # Use best available transcript
+    source_path = None
+    for name in ["edited.json", "cleaned.json", "corrected.json", "raw.json"]:
+        path = project_dir / "transcripts" / name
+        if path.exists():
+            source_path = path
+            break
+
+    if not source_path:
+        raise HTTPException(404, "No transcript found")
+
+    transcript = load_transcript(str(source_path))
+    segments = transcript["segments"]
+
+    # Gather dictionary terms for context
+    dictionary = load_dictionary()
+    terms = [entry["correct"] for entry in dictionary]
+
+    try:
+        polished_segments = polish_transcript(segments, terms)
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
+
+    # Save as polished (uses edited.json slot since it's a user-triggered refinement)
+    polished_data = {
+        "segments": polished_segments,
+        "raw_text": " ".join(seg["text"] for seg in polished_segments),
+    }
+    save_transcript(polished_data, str(project_dir / "transcripts" / "edited.json"))
+
+    return {"status": "complete", "segments": len(polished_segments)}
 
 
 # Dictionary management endpoints

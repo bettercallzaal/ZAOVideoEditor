@@ -1,6 +1,7 @@
 import json
 import re
 from pathlib import Path
+from typing import Optional
 
 DICTIONARY_PATH = Path(__file__).parent.parent.parent / "shared" / "dictionary.json"
 
@@ -53,17 +54,89 @@ def apply_corrections(text: str) -> str:
     return text
 
 
+def apply_fuzzy_corrections(text: str, threshold: float = 80.0) -> str:
+    """Apply fuzzy/phonetic dictionary corrections to text.
+
+    Uses rapidfuzz for similarity matching to catch phonetic misspellings
+    like "sal torius" -> "Saltorius". Only applies when no exact match exists.
+    """
+    try:
+        from rapidfuzz import fuzz
+    except ImportError:
+        # rapidfuzz not installed — skip fuzzy matching
+        return text
+
+    data = load_dictionary()
+    corrections = data.get("corrections", {})
+    if not corrections:
+        return text
+
+    words = text.split()
+
+    # Separate single-word and multi-word correction keys
+    single_keys = {k: v for k, v in corrections.items() if ' ' not in k}
+    multi_keys = {k: v for k, v in corrections.items() if ' ' in k}
+
+    # --- Pass 1: Check bigrams/trigrams against multi-word keys ---
+    for key, correct in sorted(multi_keys.items(), key=lambda x: len(x[0]), reverse=True):
+        key_word_count = len(key.split())
+        i = 0
+        while i <= len(words) - key_word_count:
+            ngram = ' '.join(words[i:i + key_word_count]).lower()
+            # Skip if it's already an exact match (handled by apply_corrections)
+            if ngram == key:
+                i += 1
+                continue
+            score = fuzz.ratio(ngram, key)
+            if score >= threshold:
+                # Replace the ngram with the correction
+                words[i:i + key_word_count] = [correct]
+                # Don't advance past the replacement
+                i += 1
+            else:
+                i += 1
+
+    # --- Pass 2: Check individual words against single-word keys ---
+    for i, word in enumerate(words):
+        # Strip punctuation for matching but preserve it for reconstruction
+        stripped = word.strip('.,!?;:"\'-()[]{}')
+        if not stripped:
+            continue
+        lower = stripped.lower()
+
+        # Skip if exact match exists (already handled by apply_corrections)
+        if lower in corrections:
+            continue
+
+        best_score = 0.0
+        best_correction: Optional[str] = None
+        for key, correct in single_keys.items():
+            score = fuzz.ratio(lower, key)
+            if score > best_score and score >= threshold:
+                best_score = score
+                best_correction = correct
+
+        if best_correction is not None:
+            # Preserve surrounding punctuation
+            prefix = word[:len(word) - len(word.lstrip('.,!?;:"\'-()[]{}'))]
+            suffix = word[len(stripped) + len(prefix):]
+            words[i] = prefix + best_correction + suffix
+
+    return ' '.join(words)
+
+
 def apply_corrections_to_segments(segments: list) -> list:
     """Apply dictionary corrections to transcript segments."""
     corrected = []
     for seg in segments:
         new_seg = dict(seg)
-        new_seg["text"] = apply_corrections(seg["text"])
+        # Exact matching first, then fuzzy/phonetic matching
+        new_seg["text"] = apply_fuzzy_corrections(apply_corrections(seg["text"]))
         if seg.get("words"):
             new_words = []
             for w in seg["words"]:
                 new_w = dict(w)
-                new_w["word"] = apply_corrections(w["word"])
+                new_w["word"] = apply_fuzzy_corrections(apply_corrections(w["word"]))
                 new_words.append(new_w)
             new_seg["words"] = new_words
         corrected.append(new_seg)

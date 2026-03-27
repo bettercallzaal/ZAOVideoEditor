@@ -33,7 +33,7 @@ class AssemblyRequest(BaseModel):
 class TranscriptionRequest(BaseModel):
     project_name: str
     model_size: str = "base"
-    engine: str = "auto"           # "faster-whisper", "whisperx", "auto"
+    engine: str = "auto"           # "faster-whisper", "whisperx", "groq", "auto"
     refine_timestamps: bool = True  # use stable-ts if available
 
 

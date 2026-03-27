@@ -6,6 +6,7 @@ import {
   saveTranscriptEdit, addDictEntry,
   diarizeSpeakers, renameSpeakers, pollTask,
   detectFillers, removeFillers,
+  polishTranscript,
 } from '../api/client';
 
 // Speaker color palette
@@ -142,6 +143,27 @@ export default function TranscriptEditor({ projectName, stages, onSeek, onComple
     }
   };
 
+  const handlePolish = async () => {
+    setProcessing(true);
+    setError('');
+    setProgress(10);
+    setProgressStatus('Polishing transcript with AI...');
+    setSubsteps([{ label: 'Fix names, brands, and proper nouns via LLM', status: 'active' }]);
+    try {
+      await polishTranscript(projectName);
+      setProgress(100);
+      setProgressStatus('Transcript polished');
+      setSubsteps([{ label: 'Fix names, brands, and proper nouns via LLM', status: 'complete' }]);
+      await loadTranscript();
+      onComplete();
+    } catch (e) {
+      setError(e.message);
+      setProgressStatus('Polish failed');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const handleSaveAll = async () => {
     setProcessing(true);
     setProgress(30);
@@ -225,6 +247,10 @@ export default function TranscriptEditor({ projectName, stages, onSeek, onComple
           <button onClick={handleDetectFillers}
             className="text-xs bg-gray-700 px-3 py-1.5 rounded text-gray-300 hover:bg-gray-600">
             Find Fillers
+          </button>
+          <button onClick={handlePolish}
+            className="text-xs bg-purple-800 px-3 py-1.5 rounded text-purple-200 hover:bg-purple-700">
+            Polish with AI
           </button>
           <button onClick={handleSaveAll}
             className="text-xs bg-[#e0ddaa] text-[#141e27] px-3 py-1.5 rounded font-medium hover:bg-[#d4d19e]">
