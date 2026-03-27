@@ -10,12 +10,36 @@ import re
 
 
 def _get_client():
-    """Get an OpenAI-compatible client. Supports OpenAI and Groq."""
+    """Get an OpenAI-compatible client. Priority: Ollama (local) > OpenAI > Groq."""
+    # 1. Try Ollama (local, free, no API key needed)
+    try:
+        import httpx
+        r = httpx.get("http://localhost:11434/api/tags", timeout=2)
+        if r.status_code == 200:
+            models = r.json().get("models", [])
+            # Pick best available model
+            model_prefs = ["qwen3:30b", "qwen3:14b", "qwen3:8b", "llama3.2:latest", "mistral:latest"]
+            model_names = [m["name"] for m in models]
+            picked = None
+            for pref in model_prefs:
+                if pref in model_names:
+                    picked = pref
+                    break
+            if not picked and model_names:
+                picked = model_names[0]
+            if picked:
+                from openai import OpenAI
+                return OpenAI(api_key="ollama", base_url="http://localhost:11434/v1"), picked
+    except Exception:
+        pass
+
+    # 2. OpenAI
     api_key = os.environ.get("OPENAI_API_KEY")
     if api_key:
         from openai import OpenAI
         return OpenAI(), "gpt-4o-mini"
 
+    # 3. Groq (free tier)
     groq_key = os.environ.get("GROQ_API_KEY")
     if groq_key:
         from openai import OpenAI

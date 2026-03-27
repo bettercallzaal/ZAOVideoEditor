@@ -24,3 +24,4 @@ pyannote.audio>=3.1
 # pip install ltx-pipelines        # Native LTX-2 pipeline (alternative to diffusers)
 # pip install TTS                  # Coqui XTTS-v2 voice cloning + TTS
 # pip install audiocraft           # Meta MusicGen background music generation
+openai
