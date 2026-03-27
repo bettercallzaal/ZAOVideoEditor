@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from ..models.schemas import TranscriptEditRequest, CleanupRequest, DictionaryEntry
 from ..services.dictionary import (
     load_dictionary, add_correction, remove_correction,
-    apply_corrections_to_segments,
+    apply_corrections_to_segments, learn_from_edits,
 )
 from ..services.cleanup import cleanup_transcript
 from ..services.whisper_service import load_transcript, save_transcript
@@ -82,17 +82,34 @@ async def get_current_transcript(project_name: str):
 
 @router.post("/save-edit")
 async def save_edit(req: TranscriptEditRequest):
-    """Save user edits to transcript."""
+    """Save user edits to transcript and auto-learn corrections."""
     project_dir = PROJECTS_DIR / req.project_name
     if not project_dir.exists():
         raise HTTPException(404, "Project not found")
 
     segments = [seg.model_dump() for seg in req.segments]
+
+    # Auto-learn: diff against the previous best transcript to find corrections
+    before_segments = None
+    for name in ["edited.json", "cleaned.json", "corrected.json", "raw.json"]:
+        path = project_dir / "transcripts" / name
+        if path.exists():
+            before_data = load_transcript(str(path))
+            before_segments = before_data.get("segments", [])
+            break
+
     edited_data = {
         "segments": segments,
         "raw_text": " ".join(seg["text"] for seg in segments),
     }
     save_transcript(edited_data, str(project_dir / "transcripts" / "edited.json"))
+
+    # Learn from the diff (runs after save so it doesn't block)
+    if before_segments:
+        try:
+            learn_from_edits(before_segments, segments)
+        except Exception:
+            pass  # Don't fail the save if learning fails
 
     return {"status": "saved", "segments": len(segments)}
 

@@ -46,8 +46,8 @@ def apply_corrections(text: str) -> str:
 
     for wrong in sorted_keys:
         correct = corrections[wrong]
-        # Case-insensitive word boundary replacement
-        pattern = re.compile(re.escape(wrong), re.IGNORECASE)
+        # Case-insensitive replacement with word boundaries to avoid partial matches
+        pattern = re.compile(r'\b' + re.escape(wrong) + r'\b', re.IGNORECASE)
         text = pattern.sub(correct, text)
 
     return text
@@ -68,3 +68,71 @@ def apply_corrections_to_segments(segments: list) -> list:
             new_seg["words"] = new_words
         corrected.append(new_seg)
     return corrected
+
+
+def learn_from_edits(before_segments: list, after_segments: list):
+    """Auto-learn new dictionary corrections by diffing pre-edit and post-edit segments.
+
+    Compares segment text before and after user edits. When a user consistently
+    changes the same word/phrase, it gets added to the dictionary automatically.
+    """
+    data = load_dictionary()
+    corrections = data.get("corrections", {})
+    candidates = data.get("_candidates", {})  # track frequency before promoting
+
+    # Build text maps keyed by segment ID for alignment
+    before_map = {seg.get("id", i): seg["text"] for i, seg in enumerate(before_segments)}
+    after_map = {seg.get("id", i): seg["text"] for i, seg in enumerate(after_segments)}
+
+    new_pairs = []
+    for seg_id in before_map:
+        if seg_id not in after_map:
+            continue
+        old_text = before_map[seg_id]
+        new_text = after_map[seg_id]
+        if old_text == new_text:
+            continue
+
+        # Extract word-level diffs
+        old_words = old_text.split()
+        new_words = new_text.split()
+
+        from difflib import SequenceMatcher
+        sm = SequenceMatcher(None, old_words, new_words)
+        for op, i1, i2, j1, j2 in sm.get_opcodes():
+            if op == 'replace':
+                old_phrase = ' '.join(old_words[i1:i2]).strip()
+                new_phrase = ' '.join(new_words[j1:j2]).strip()
+                # Only learn short replacements (1-3 words) to avoid noise
+                if old_phrase and new_phrase and len(old_words[i1:i2]) <= 3:
+                    new_pairs.append((old_phrase.lower(), new_phrase))
+
+    if not new_pairs:
+        return
+
+    # Track candidates — promote to dictionary after 2+ occurrences
+    changed = False
+    for wrong, correct in new_pairs:
+        # Skip if already in dictionary
+        if wrong in corrections:
+            continue
+        # Skip if the "wrong" text is the same as "correct" (case-insensitive)
+        if wrong == correct.lower():
+            continue
+
+        if wrong in candidates:
+            candidates[wrong]["count"] += 1
+            candidates[wrong]["correct"] = correct
+            # Promote to dictionary after seen twice
+            if candidates[wrong]["count"] >= 2:
+                corrections[wrong] = correct
+                del candidates[wrong]
+                changed = True
+        else:
+            candidates[wrong] = {"correct": correct, "count": 1}
+            changed = True
+
+    if changed or new_pairs:
+        data["corrections"] = corrections
+        data["_candidates"] = candidates
+        save_dictionary(data)

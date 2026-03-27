@@ -38,9 +38,23 @@ def transcribe_audio_whisperx(
     if on_progress:
         on_progress(15, "Transcribing audio...")
 
+    # Build initial_prompt from dictionary for better name/brand recognition
+    initial_prompt = None
+    try:
+        from .dictionary import load_dictionary
+        data = load_dictionary()
+        terms = sorted(set(data.get("corrections", {}).values()))
+        if terms:
+            initial_prompt = "Glossary: " + ", ".join(terms)
+    except Exception:
+        pass
+
     start_time = time.time()
     audio = whisperx.load_audio(audio_path)
-    result = model.transcribe(audio, batch_size=8)
+    transcribe_opts = {"batch_size": 8}
+    if initial_prompt:
+        transcribe_opts["initial_prompt"] = initial_prompt
+    result = model.transcribe(audio, **transcribe_opts)
 
     if on_progress:
         on_progress(50, "Aligning word timestamps...")

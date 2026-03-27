@@ -43,8 +43,36 @@ PASS_CONFIGS = [
 ]
 
 
+def _build_vocab_prompt() -> tuple[str | None, str | None]:
+    """Build initial_prompt and hotwords from the correction dictionary.
+
+    Returns (initial_prompt, hotwords) for faster-whisper.
+    """
+    try:
+        from .dictionary import load_dictionary
+        data = load_dictionary()
+        corrections = data.get("corrections", {})
+        if not corrections:
+            return None, None
+
+        # Unique correct terms for the prompt
+        terms = sorted(set(corrections.values()))
+
+        # initial_prompt: glossary format gives Whisper spelling context
+        initial_prompt = "Glossary: " + ", ".join(terms)
+
+        # hotwords: space-separated terms that boost token probabilities
+        hotwords = ", ".join(terms)
+
+        return initial_prompt, hotwords
+    except Exception:
+        return None, None
+
+
 def _run_single_pass(model, audio_path: str, config: dict, on_progress=None) -> list:
     """Run a single transcription pass and return segments."""
+    initial_prompt, hotwords = _build_vocab_prompt()
+
     segments_iter, info = model.transcribe(
         audio_path,
         beam_size=config["beam_size"],
@@ -59,6 +87,8 @@ def _run_single_pass(model, audio_path: str, config: dict, on_progress=None) -> 
         condition_on_previous_text=config.get("condition_on_previous_text", True),
         no_speech_threshold=config.get("no_speech_threshold", 0.6),
         compression_ratio_threshold=config.get("compression_ratio_threshold", 2.4),
+        initial_prompt=initial_prompt,
+        hotwords=hotwords,
     )
 
     duration = info.duration if info.duration else 1
