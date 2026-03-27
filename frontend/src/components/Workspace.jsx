@@ -12,6 +12,7 @@ import ClipsPanel from './ClipsPanel';
 import AiToolsPanel from './AiToolsPanel';
 import YouTubePanel from './YouTubePanel';
 import SeoChecklist from './SeoChecklist';
+import ContentPanel from './ContentPanel';
 import GuidedMode from './GuidedMode';
 import { getProject, getVideoUrl } from '../api/client';
 
@@ -20,6 +21,7 @@ const TABS = [
   { id: 'youtube', label: 'YouTube' },
   { id: 'transcript', label: 'Transcript' },
   { id: 'captions', label: 'Captions' },
+  { id: 'content', label: 'Content' },
   { id: 'clips', label: 'Clips' },
   { id: 'ai', label: 'AI Tools' },
   { id: 'metadata', label: 'Metadata' },
@@ -237,6 +239,13 @@ export default function Workspace({ projectName, onBack }) {
                 projectName={projectName}
                 stages={project.stages}
                 onComplete={handleStageComplete}
+              />
+            )}
+            {activeTab === 'content' && (
+              <ContentPanel
+                projectName={projectName}
+                stages={project.stages}
+                onSeek={handleSeek}
               />
             )}
             {activeTab === 'clips' && (

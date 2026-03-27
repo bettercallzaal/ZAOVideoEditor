@@ -291,6 +291,16 @@ export const youtubeTranscribe = (url, projectName, quality = 'standard') =>
     body: JSON.stringify({ url, project_name: projectName, quality }),
   });
 
+// --- Content Generation ---
+export const generateContent = (projectName) =>
+  request('/content/generate', {
+    method: 'POST',
+    body: JSON.stringify({ project_name: projectName }),
+  });
+
+export const getContent = (projectName) =>
+  request(`/content/${encodeURIComponent(projectName)}`);
+
 // --- AI Tools: Tier 1 (CPU) ---
 export const upscaleVideo = (projectName, scale = 2) =>
   request('/ai/upscale', { method: 'POST', body: JSON.stringify({ project_name: projectName, scale }) });
