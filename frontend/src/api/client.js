@@ -7,7 +7,13 @@ async function request(url, options = {}) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || 'Request failed');
+    const detail = err.detail;
+    if (typeof detail === 'object' && detail !== null) {
+      const e = new Error(detail.message || 'Request failed');
+      e.action = detail.action;
+      throw e;
+    }
+    throw new Error(detail || 'Request failed');
   }
   return res.json();
 }
@@ -370,6 +376,18 @@ export const mixMusic = (projectName, volume = 0.15) =>
 
 export const generateAiThumbnail = (projectName, prompt) =>
   request('/ai/ai-thumbnail', { method: 'POST', body: JSON.stringify({ project_name: projectName, prompt }) });
+
+// --- Quick Process (Full Pipeline) ---
+export const quickProcess = (projectName, options = {}) =>
+  request('/pipeline/quick-process', {
+    method: 'POST',
+    body: JSON.stringify({
+      project_name: projectName,
+      quality: options.quality || 'standard',
+      engine: options.engine || 'auto',
+      style: options.style || 'classic',
+    }),
+  });
 
 // --- Batch Processing ---
 export const batchProcess = (projectNames, options = {}) =>

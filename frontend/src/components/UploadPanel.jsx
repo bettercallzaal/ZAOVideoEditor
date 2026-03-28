@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
+import ErrorMessage from './ErrorMessage';
 import ProgressBar from './ProgressBar';
 import {
   uploadMainVideo, uploadIntro, uploadOutro,
   assembleVideo, transcribe, pollTask,
   getAvailableTools, previewSilenceCuts, removeSilence,
   getDictionary, listTemplates, saveTemplate, deleteTemplate,
+  quickProcess,
 } from '../api/client';
 
 export default function UploadPanel({ projectName, stages, onComplete, onTranscribed }) {
@@ -236,6 +238,64 @@ export default function UploadPanel({ projectName, stages, onComplete, onTranscr
       if (onTranscribed) onTranscribed();
     } catch (e) {
       setError(`Processing failed: ${e.message}`);
+      setProgressStatus('Failed');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleQuickProcess = async () => {
+    setProcessing(true);
+    setError('');
+    setProgress(0);
+
+    const steps = [
+      'Assemble + extract audio',
+      'Transcribe',
+      'Dictionary correct',
+      'AI polish',
+      'Generate content',
+      'Generate captions',
+      'Generate metadata',
+    ];
+
+    try {
+      updateStep(steps, 0);
+      setProgressStatus('Starting full pipeline...');
+
+      const task = await quickProcess(projectName, { quality, engine });
+
+      await pollTask(task.task_id, (t) => {
+        setProgress(t.progress);
+        if (t.message) setProgressStatus(t.message);
+
+        // Map progress ranges to substep indices
+        let stepIdx = 0;
+        if (t.progress >= 95) stepIdx = 7;       // done
+        else if (t.progress >= 80) stepIdx = 6;   // metadata
+        else if (t.progress >= 65) stepIdx = 5;   // captions
+        else if (t.progress >= 50) stepIdx = 4;   // content
+        else if (t.progress >= 35) stepIdx = 3;   // polish
+        else if (t.progress >= 25) stepIdx = 2;   // dictionary
+        else if (t.progress >= 15) stepIdx = 1;   // transcribe
+        else stepIdx = 0;                          // assemble
+
+        updateStep(steps, stepIdx);
+      });
+
+      setProgress(100);
+      const finalTask = await pollTask(task.task_id, null, 100);
+      const r = finalTask.result || {};
+
+      let doneMsg = `Pipeline complete! ${r.segments || '?'} segments, ${r.captions || '?'} captions`;
+      if (r.engine) doneMsg += `, engine: ${r.engine}`;
+      setProgressStatus(doneMsg);
+
+      updateStep(steps, steps.length);
+      onComplete();
+      if (onTranscribed) onTranscribed();
+    } catch (e) {
+      setError(`Quick process failed: ${e.message}`);
       setProgressStatus('Failed');
     } finally {
       setProcessing(false);
@@ -493,15 +553,23 @@ export default function UploadPanel({ projectName, stages, onComplete, onTranscr
               </label>
             )}
           </div>
+          {!tools.groq && (
+            <span className="text-[10px] text-gray-600">Set GROQ_API_KEY for fast cloud transcription</span>
+          )}
 
-          <button onClick={handleProcess} className="w-full bg-[#e0ddaa] text-[#141e27] py-3 rounded-lg font-medium hover:bg-[#d4d19e]">
-            {removeSilenceEnabled ? 'Assemble + Trim + Transcribe' : 'Assemble + Transcribe'}
-          </button>
+          <div className="flex gap-2">
+            <button onClick={handleProcess} className="flex-1 bg-[#e0ddaa] text-[#141e27] py-3 rounded-lg font-medium hover:bg-[#d4d19e]">
+              {removeSilenceEnabled ? 'Assemble + Trim + Transcribe' : 'Assemble + Transcribe'}
+            </button>
+            <button onClick={handleQuickProcess} className="flex-1 bg-[#141e27] text-[#e0ddaa] py-3 rounded-lg font-medium border-2 border-[#e0ddaa] hover:bg-[#e0ddaa]/10">
+              Quick Process (Full Pipeline)
+            </button>
+          </div>
           <div className="flex items-center justify-between mt-1">
             <p className="text-xs text-gray-500">
               {removeSilenceEnabled
                 ? 'Assembles video, removes dead air, extracts audio, and runs local transcription.'
-                : 'Assembles video, extracts audio, and runs local transcription.'}
+                : 'Left: assemble + transcribe only. Right: full pipeline (transcribe, correct, captions, metadata).'}
             </p>
             {dictCount > 0 && (
               <span className="text-xs text-[#e0ddaa]/60 shrink-0 ml-2">
@@ -519,7 +587,10 @@ export default function UploadPanel({ projectName, stages, onComplete, onTranscr
 
       {/* Error */}
       {error && (
-        <div className="bg-red-900/30 border border-red-800 rounded p-3 text-sm text-red-300">{error}</div>
+        <ErrorMessage
+          error={error}
+          onDismiss={() => setError('')}
+        />
       )}
     </div>
   );

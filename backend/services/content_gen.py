@@ -112,9 +112,18 @@ Analyze this transcript and return a JSON object with these fields:
 
    Prioritize moments that are: surprising revelations, strong opinions, funny/emotional reactions, specific actionable advice, memorable quotes, heated exchanges, or "aha" moments. Avoid generic filler or transitions.
 
-3. "show_notes" — Timestamped show notes suitable for a YouTube description. Include major topic transitions with timestamps.
+3. "chapters" — An array of 8-15 YouTube chapter markers covering major topic transitions. Each object has:
+   - "time": Timestamp as "MM:SS" (first chapter MUST be "00:00")
+   - "title": Short chapter title (3-8 words)
 
-4. "tweets" — 5 standalone tweets (under 280 chars each) that each highlight a different interesting moment or insight from the conversation. Include the timestamp reference.
+4. "quotes" — Top 5 most quotable/memorable moments. Each object has:
+   - "text": The exact quote (1-2 sentences)
+   - "timestamp": When it was said as "MM:SS"
+   - "context": One sentence of context (who said it, why it matters)
+
+5. "show_notes" — Timestamped show notes suitable for a YouTube description. Include major topic transitions with timestamps.
+
+6. "tweets" — 5 standalone tweets (under 280 chars each) that each highlight a different interesting moment or insight from the conversation. Include the timestamp reference.
 
 IMPORTANT: Use the exact timestamps from the transcript. Return ONLY valid JSON, no markdown fences.
 

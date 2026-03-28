@@ -147,6 +147,11 @@ export default function ExportPanel({ projectName, stages, onComplete }) {
           )}
         </div>
       )}
+      {!gdriveAvailable && (
+        <p className="text-xs text-gray-600">
+          Place credentials.json in backend/ to enable Google Drive uploads
+        </p>
+      )}
 
       {/* Progress */}
       {(exporting || progress > 0) && (

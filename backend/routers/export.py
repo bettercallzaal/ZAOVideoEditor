@@ -164,7 +164,7 @@ def _format_notebooklm(project_name: str, transcript: dict) -> str:
     return "\n".join(lines)
 
 
-@router.post("/{project_name}/notebooklm")
+@router.get("/{project_name}/notebooklm")
 async def export_notebooklm(project_name: str):
     """Export transcript as a .txt file optimized for NotebookLM."""
     project_dir = PROJECTS_DIR / project_name

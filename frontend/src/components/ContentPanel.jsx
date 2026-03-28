@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import ErrorMessage from './ErrorMessage';
 import { generateContent, getContent, generateAudioSummary, getExportDownloadUrl, exportClip, pollTask, getClipDownloadUrl } from '../api/client';
 
 function formatTime(seconds) {
@@ -7,10 +8,18 @@ function formatTime(seconds) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+function _parseTimestamp(ts) {
+  if (!ts) return 0;
+  const parts = ts.split(':').map(Number);
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return 0;
+}
+
 export default function ContentPanel({ projectName, stages, onSeek }) {
   const [content, setContent] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
   const [copiedField, setCopiedField] = useState('');
   const [audioLoading, setAudioLoading] = useState(false);
   const [audioFile, setAudioFile] = useState(null);
@@ -32,12 +41,12 @@ export default function ContentPanel({ projectName, stages, onSeek }) {
 
   const handleGenerate = async () => {
     setLoading(true);
-    setError('');
+    setError(null);
     try {
       const data = await generateContent(projectName);
       setContent(data);
     } catch (e) {
-      setError(e.message);
+      setError(e);
     } finally {
       setLoading(false);
     }
@@ -125,12 +134,11 @@ export default function ContentPanel({ projectName, stages, onSeek }) {
       )}
 
       {error && (
-        <div className="bg-red-900/30 border border-red-800 rounded p-3 text-sm text-red-300">
-          {error}
-          {error.includes('API key') && (
-            <p className="mt-1 text-xs">Set OPENAI_API_KEY or GROQ_API_KEY in your environment, then restart the backend.</p>
-          )}
-        </div>
+        <ErrorMessage
+          error={error}
+          onRetry={handleGenerate}
+          onDismiss={() => setError('')}
+        />
       )}
 
       {loading && (
@@ -281,6 +289,57 @@ export default function ContentPanel({ projectName, stages, onSeek }) {
               >
                 {copiedField === 'clips' ? 'Copied!' : 'Copy All Clips'}
               </button>
+            </section>
+          )}
+
+          {/* Chapters */}
+          {content.chapters?.length > 0 && (
+            <section className="bg-[#1a1f2e] rounded-lg p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium text-[#e0ddaa]">YouTube Chapters ({content.chapters.length})</h4>
+                <CopyBtn
+                  text={content.chapters.map(c => `${c.time} ${c.title}`).join('\n')}
+                  field="chapters"
+                />
+              </div>
+              <div className="space-y-1">
+                {content.chapters.map((ch, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <button
+                      onClick={() => onSeek && onSeek(_parseTimestamp(ch.time))}
+                      className="font-mono text-[#e0ddaa] hover:underline shrink-0 w-12 text-right"
+                    >
+                      {ch.time}
+                    </button>
+                    <span className="text-gray-300">{ch.title}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Quotable Moments */}
+          {content.quotes?.length > 0 && (
+            <section className="space-y-2">
+              <h4 className="text-sm font-medium text-[#e0ddaa]">Quotable Moments ({content.quotes.length})</h4>
+              {content.quotes.map((q, i) => (
+                <div
+                  key={i}
+                  className="bg-[#1a1f2e] rounded-lg p-3 cursor-pointer hover:bg-[#1a1f2e]/80"
+                  onClick={() => onSeek && onSeek(_parseTimestamp(q.timestamp))}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <p className="text-sm text-white italic">"{q.text}"</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] font-mono text-[#e0ddaa]">{q.timestamp}</span>
+                        <span className="text-[10px] text-gray-500">{q.context}</span>
+                      </div>
+                    </div>
+                    <CopyBtn text={q.text} field={`quote-${i}`} />
+                  </div>
+                </div>
+              ))}
             </section>
           )}
 

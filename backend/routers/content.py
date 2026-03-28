@@ -42,9 +42,15 @@ async def generate_content(req: ContentRequest):
             project_name=req.project_name,
         )
     except RuntimeError as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, {
+            "message": str(e),
+            "action": "Install Ollama locally, or set OPENAI_API_KEY / GROQ_API_KEY in your environment and restart the backend.",
+        })
     except Exception as e:
-        raise HTTPException(500, f"Content generation failed: {e}")
+        raise HTTPException(500, {
+            "message": f"Content generation failed: {e}",
+            "action": "Check the backend server logs for the full traceback.",
+        })
 
     # Save to project
     content_path = project_dir / "metadata" / "content.json"
