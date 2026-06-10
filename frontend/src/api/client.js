@@ -301,10 +301,34 @@ export const detectHighlights = (projectName, count = 5, minDuration = 30, maxDu
     body: JSON.stringify({ project_name: projectName, count, min_duration: minDuration, max_duration: maxDuration }),
   });
 
-export const exportClip = (projectName, start, end, title = '', vertical = false) =>
+export const exportClip = (projectName, start, end, title = '', opts = {}) =>
   request('/clips/export', {
     method: 'POST',
-    body: JSON.stringify({ project_name: projectName, start, end, title, vertical }),
+    body: JSON.stringify({
+      project_name: projectName, start, end, title,
+      aspects: opts.aspects || ['9:16'],
+      burn_captions: opts.burnCaptions !== false,
+      style: opts.style || 'bold_pop',
+      speaker_aware: !!opts.speakerAware,
+      generate_copy: opts.generateCopy !== false,
+    }),
+  });
+
+export const batchExportClips = (projectName, opts = {}) =>
+  request('/clips/batch-export', {
+    method: 'POST',
+    body: JSON.stringify({
+      project_name: projectName,
+      count: opts.count ?? 5,
+      min_duration: opts.minDuration ?? 30,
+      max_duration: opts.maxDuration ?? 90,
+      aspects: opts.aspects || ['9:16'],
+      burn_captions: opts.burnCaptions !== false,
+      style: opts.style || 'bold_pop',
+      speaker_aware: !!opts.speakerAware,
+      generate_copy: opts.generateCopy !== false,
+      highlights: opts.highlights || null,
+    }),
   });
 
 export const listClips = (projectName) =>
