@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import ProjectList from './components/ProjectList';
 import Workspace from './components/Workspace';
 import BatchPanel from './components/BatchPanel';
+import IngestPanel from './components/IngestPanel';
 import StandalonePage from './StandalonePage';
 import TextSplitterPage from './TextSplitterPage';
 import { listProjects, createProject, deleteProject } from './api/client';
@@ -13,6 +14,7 @@ export default function App() {
   const [standalone, setStandalone] = useState(false);
   const [page, setPage] = useState('home'); // 'home' | 'text-splitter'
   const [showBatch, setShowBatch] = useState(false);
+  const [showIngest, setShowIngest] = useState(false);
 
   const refreshProjects = async () => {
     try {
@@ -65,6 +67,12 @@ export default function App() {
         </div>
         <div className="flex gap-2">
           <button
+            onClick={() => setShowIngest(prev => !prev)}
+            className="text-sm text-gray-400 hover:text-[#e0ddaa] border border-gray-700 px-3 py-1.5 rounded hover:border-[#e0ddaa]"
+          >
+            Ingest URL
+          </button>
+          <button
             onClick={() => setShowBatch(prev => !prev)}
             className="text-sm text-gray-400 hover:text-[#e0ddaa] border border-gray-700 px-3 py-1.5 rounded hover:border-[#e0ddaa]"
           >
@@ -79,6 +87,12 @@ export default function App() {
         </div>
       </header>
       <main className="max-w-4xl mx-auto p-6 space-y-6">
+        {showIngest && (
+          <IngestPanel
+            onClose={() => setShowIngest(false)}
+            onComplete={(name) => { setShowIngest(false); refreshProjects(); setCurrentProject(name); }}
+          />
+        )}
         {showBatch && !loading && (
           <BatchPanel
             projects={projects}

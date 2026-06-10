@@ -313,6 +313,18 @@ export const listClips = (projectName) =>
 export const getClipDownloadUrl = (projectName, filename) =>
   `${BASE}/clips/${encodeURIComponent(projectName)}/download/${encodeURIComponent(filename)}`;
 
+// --- Ingest (livestream / VOD by URL) ---
+export const getIngestSources = () => request('/ingest/sources');
+
+export const probeIngestUrl = (url) =>
+  request('/ingest/probe', { method: 'POST', body: JSON.stringify({ url }) });
+
+export const ingestUrl = (url, projectName, description = '') =>
+  request('/ingest', {
+    method: 'POST',
+    body: JSON.stringify({ url, project_name: projectName, description }),
+  });
+
 // --- YouTube ---
 export const getYouTubeInfo = (url) =>
   request('/youtube/info', { method: 'POST', body: JSON.stringify({ url }) });
