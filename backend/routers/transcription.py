@@ -8,6 +8,7 @@ from ..services import task_manager as tm
 router = APIRouter(prefix="/api/transcription", tags=["transcription"])
 
 PROJECTS_DIR = Path(__file__).parent.parent.parent / "projects"
+from ..services.project_utils import validate_project_name
 
 
 def _do_transcribe(task_id: str, project_dir: Path, model_size: str,
@@ -145,6 +146,7 @@ async def transcribe(req: TranscriptionRequest):
 
 @router.get("/{project_name}/raw")
 async def get_raw_transcript(project_name: str):
+    validate_project_name(project_name)
     project_dir = PROJECTS_DIR / project_name
     raw_path = project_dir / "transcripts" / "raw.json"
     if not raw_path.exists():

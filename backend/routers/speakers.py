@@ -12,6 +12,7 @@ from ..services import task_manager as tm
 router = APIRouter(prefix="/api/speakers", tags=["speakers"])
 
 PROJECTS_DIR = Path(__file__).parent.parent.parent / "projects"
+from ..services.project_utils import validate_project_name
 
 
 class DiarizeRequest(BaseModel):
@@ -95,6 +96,7 @@ async def rename(req: RenameSpeakerRequest):
 @router.get("/{project_name}")
 async def get_speakers(project_name: str):
     """Get speaker info for a project."""
+    validate_project_name(project_name)
     speakers_path = PROJECTS_DIR / project_name / "transcripts" / "speakers.json"
     if not speakers_path.exists():
         raise HTTPException(404, "No diarization data. Run speaker detection first.")

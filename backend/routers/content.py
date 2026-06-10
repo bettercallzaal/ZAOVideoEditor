@@ -10,6 +10,7 @@ from ..services.whisper_service import load_transcript
 router = APIRouter(prefix="/api/content", tags=["content"])
 
 PROJECTS_DIR = Path(__file__).parent.parent.parent / "projects"
+from ..services.project_utils import validate_project_name
 
 
 class ContentRequest(BaseModel):
@@ -64,6 +65,7 @@ async def generate_content(req: ContentRequest):
 @router.post("/{project_name}/audio-summary")
 async def generate_audio_summary_endpoint(project_name: str):
     """Generate a podcast-style audio summary from the recap."""
+    validate_project_name(project_name)
     project_dir = PROJECTS_DIR / project_name
     if not project_dir.exists():
         raise HTTPException(404, "Project not found")
@@ -101,6 +103,7 @@ async def generate_audio_summary_endpoint(project_name: str):
 @router.get("/{project_name}")
 async def get_content(project_name: str):
     """Get previously generated content."""
+    validate_project_name(project_name)
     content_path = PROJECTS_DIR / project_name / "metadata" / "content.json"
     if not content_path.exists():
         raise HTTPException(404, "No content generated yet")

@@ -8,6 +8,7 @@ from ..services import task_manager as tm
 router = APIRouter(prefix="/api/assembly", tags=["assembly"])
 
 PROJECTS_DIR = Path(__file__).parent.parent.parent / "projects"
+from ..services.project_utils import validate_project_name
 
 
 def find_main_video(project_dir: Path) -> Path:
@@ -85,6 +86,7 @@ async def assemble(req: AssemblyRequest):
 @router.post("/extract-audio")
 async def extract_audio_endpoint(project_name: str):
     """Extract audio from assembled/main video."""
+    validate_project_name(project_name)
     project_dir = PROJECTS_DIR / project_name
     if not project_dir.exists():
         raise HTTPException(404, "Project not found")
