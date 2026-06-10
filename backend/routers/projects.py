@@ -11,6 +11,7 @@ from ..services.storage import (
     get_project_storage, get_all_projects_storage,
     get_cleanable_files, cleanup_project, verify_file_integrity,
 )
+from ..services.project_utils import validate_project_name, is_within
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -18,7 +19,17 @@ PROJECTS_DIR = Path(__file__).parent.parent.parent / "projects"
 
 
 def get_project_dir(name: str) -> Path:
-    return PROJECTS_DIR / name
+    """Resolve a project directory for the given name.
+
+    Validates the name and asserts the resolved path stays inside PROJECTS_DIR
+    so create/delete/upload routes cannot be tricked into touching paths outside
+    the projects root via "../" or absolute segments.
+    """
+    validate_project_name(name)
+    d = (PROJECTS_DIR / name).resolve()
+    if not is_within(d, PROJECTS_DIR):
+        raise HTTPException(403, "Access denied")
+    return d
 
 
 def get_stage_status(project_dir: Path) -> dict:

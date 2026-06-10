@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
 from ..models.schemas import ExportRequest
 from ..services.whisper_service import load_transcript
+from ..services.project_utils import validate_project_name, is_within
 
 router = APIRouter(prefix="/api/export", tags=["export"])
 
@@ -101,6 +102,7 @@ async def gdrive_status():
 @router.get("/{project_name}/files")
 async def list_export_files(project_name: str):
     """List files in the exports folder."""
+    validate_project_name(project_name)
     exports_dir = PROJECTS_DIR / project_name / "exports"
     if not exports_dir.exists():
         return []
@@ -110,12 +112,13 @@ async def list_export_files(project_name: str):
 @router.get("/{project_name}/download/{filename}")
 async def download_file(project_name: str, filename: str):
     """Download an export file."""
+    validate_project_name(project_name)
     file_path = (PROJECTS_DIR / project_name / "exports" / filename).resolve()
-    if not str(file_path).startswith(str((PROJECTS_DIR).resolve())):
+    if not is_within(file_path, PROJECTS_DIR / project_name / "exports"):
         raise HTTPException(403, "Access denied")
     if not file_path.exists():
         raise HTTPException(404, "File not found")
-    return FileResponse(str(file_path), filename=filename)
+    return FileResponse(str(file_path), filename=file_path.name)
 
 
 def _get_best_transcript(project_dir: Path) -> tuple[dict, str]:
@@ -167,6 +170,7 @@ def _format_notebooklm(project_name: str, transcript: dict) -> str:
 @router.get("/{project_name}/notebooklm")
 async def export_notebooklm(project_name: str):
     """Export transcript as a .txt file optimized for NotebookLM."""
+    validate_project_name(project_name)
     project_dir = PROJECTS_DIR / project_name
     if not project_dir.exists():
         raise HTTPException(404, "Project not found")
@@ -196,6 +200,7 @@ async def upload_to_gdrive(project_name: str):
     """Upload transcript/caption/metadata files to Google Drive."""
     from ..services.gdrive_service import is_gdrive_configured, upload_project_to_drive
 
+    validate_project_name(project_name)
     if not is_gdrive_configured():
         raise HTTPException(400, "Google Drive not configured — place credentials.json in backend/")
 
@@ -214,6 +219,7 @@ async def upload_to_gdrive(project_name: str):
 @router.get("/{project_name}/notebooklm-text")
 async def get_notebooklm_text(project_name: str):
     """Return the NotebookLM-formatted transcript as plain text (for clipboard copy)."""
+    validate_project_name(project_name)
     project_dir = PROJECTS_DIR / project_name
     if not project_dir.exists():
         raise HTTPException(404, "Project not found")

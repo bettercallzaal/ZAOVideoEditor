@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
 from ..services.highlights import detect_highlights, export_clip_timestamps
-from ..services.project_utils import find_video, find_best_transcript, PROJECTS_DIR
+from ..services.project_utils import find_video, find_best_transcript, PROJECTS_DIR, validate_project_name, is_within
 from ..services import task_manager as tm
 
 router = APIRouter(prefix="/api/clips", tags=["clips"])
@@ -128,6 +128,7 @@ async def export_clip(req: ClipExportRequest):
 @router.get("/{project_name}/list")
 async def list_clips(project_name: str):
     """List exported clips for a project."""
+    validate_project_name(project_name)
     clips_dir = PROJECTS_DIR / project_name / "clips"
     if not clips_dir.exists():
         return []
@@ -137,9 +138,11 @@ async def list_clips(project_name: str):
 @router.get("/{project_name}/download/{filename}")
 async def download_clip(project_name: str, filename: str):
     """Download an exported clip."""
-    file_path = (PROJECTS_DIR / project_name / "clips" / filename).resolve()
-    if not str(file_path).startswith(str((PROJECTS_DIR).resolve())):
+    validate_project_name(project_name)
+    clips_dir = PROJECTS_DIR / project_name / "clips"
+    file_path = (clips_dir / filename).resolve()
+    if not is_within(file_path, clips_dir):
         raise HTTPException(403, "Access denied")
     if not file_path.exists():
         raise HTTPException(404, "Clip not found")
-    return FileResponse(str(file_path), filename=filename)
+    return FileResponse(str(file_path), filename=file_path.name)

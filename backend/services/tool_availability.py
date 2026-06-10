@@ -27,6 +27,13 @@ def check_tool(name: str) -> bool:
                 capture_output=True, timeout=5,
             )
             available = result.returncode == 0
+        elif name == "yt_dlp":
+            import subprocess
+            result = subprocess.run(
+                ["yt-dlp", "--version"],
+                capture_output=True, timeout=10,
+            )
+            available = result.returncode == 0
         elif name == "pycaps":
             import pycaps  # noqa: F401
             available = True
@@ -85,7 +92,7 @@ def check_tool(name: str) -> bool:
 def get_available_tools() -> dict:
     """Return availability of all optional tools, grouped by tier."""
     # Original pipeline tools
-    pipeline = ["whisperx", "stable_ts", "auto_editor", "pycaps", "moviepy", "groq"]
+    pipeline = ["whisperx", "stable_ts", "auto_editor", "pycaps", "moviepy", "groq", "yt_dlp"]
 
     # Tier 1: CPU-friendly
     tier1 = ["realesrgan", "rembg", "scenedetect", "denoiser"]

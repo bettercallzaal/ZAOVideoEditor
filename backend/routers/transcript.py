@@ -13,6 +13,7 @@ from ..services.content_gen import polish_transcript
 router = APIRouter(prefix="/api/transcript", tags=["transcript"])
 
 PROJECTS_DIR = Path(__file__).parent.parent.parent / "projects"
+from ..services.project_utils import validate_project_name
 
 
 @router.post("/correct")
@@ -70,6 +71,7 @@ async def cleanup(req: CleanupRequest):
 @router.get("/{project_name}/current")
 async def get_current_transcript(project_name: str):
     """Get the best available transcript (edited > cleaned > corrected > raw)."""
+    validate_project_name(project_name)
     project_dir = PROJECTS_DIR / project_name
 
     for name in ["edited.json", "cleaned.json", "corrected.json", "raw.json"]:

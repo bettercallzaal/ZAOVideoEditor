@@ -10,6 +10,7 @@ from ..services import task_manager as tm
 from ..services.ffmpeg_service import get_video_params, assemble_videos, extract_audio
 from ..services.whisper_service import transcribe_audio, save_transcript
 from ..services.dictionary import apply_corrections_to_segments
+from ..models.schemas import ProjectName
 
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
 
@@ -17,7 +18,7 @@ PROJECTS_DIR = Path(__file__).parent.parent.parent / "projects"
 
 
 class QuickProcessRequest(BaseModel):
-    project_name: str
+    project_name: ProjectName
     quality: str = "standard"
     engine: str = "auto"
     style: str = "classic"

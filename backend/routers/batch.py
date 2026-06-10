@@ -10,6 +10,7 @@ from ..services import task_manager as tm
 from ..services.ffmpeg_service import get_video_params, assemble_videos, extract_audio
 from ..services.whisper_service import transcribe_audio, save_transcript, load_transcript
 from ..services.dictionary import apply_corrections_to_segments
+from ..models.schemas import ProjectName
 
 router = APIRouter(prefix="/api/batch", tags=["batch"])
 
@@ -17,7 +18,7 @@ PROJECTS_DIR = Path(__file__).parent.parent.parent / "projects"
 
 
 class BatchRequest(BaseModel):
-    project_names: list[str]
+    project_names: list[ProjectName]
     quality: str = "standard"
     engine: str = "auto"
     refine_timestamps: bool = True

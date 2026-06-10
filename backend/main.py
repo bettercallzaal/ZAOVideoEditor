@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pathlib import Path
 
-from .routers import projects, assembly, transcription, transcript, captions, metadata, export, speakers, fillers, clips, silence, ai_tools, youtube, content, batch, templates, pipeline
+from .routers import projects, assembly, transcription, transcript, captions, metadata, export, speakers, fillers, clips, silence, ai_tools, youtube, content, batch, templates, pipeline, ingest
 
 app = FastAPI(title="ZAO Video Editor", version="0.1.0")
 
@@ -51,6 +51,7 @@ app.include_router(content.router)
 app.include_router(batch.router)
 app.include_router(templates.router)
 app.include_router(pipeline.router)
+app.include_router(ingest.router)
 
 # Serve video files from projects directory
 PROJECTS_DIR = Path(__file__).parent.parent / "projects"
@@ -60,9 +61,12 @@ PROJECTS_DIR = Path(__file__).parent.parent / "projects"
 async def serve_video(project_name: str, subpath: str):
     """Serve video files for the player."""
     from fastapi import HTTPException
+    from .services.project_utils import validate_project_name, is_within
+    validate_project_name(project_name)
     file_path = (PROJECTS_DIR / project_name / subpath).resolve()
-    # Prevent path traversal
-    if not str(file_path).startswith(str(PROJECTS_DIR.resolve())):
+    # Prevent path traversal (relative_to containment, not a string-prefix check
+    # which would allow a sibling like /projects-evil to pass)
+    if not is_within(file_path, PROJECTS_DIR):
         raise HTTPException(403, "Access denied")
     if not file_path.exists():
         raise HTTPException(404, "File not found")

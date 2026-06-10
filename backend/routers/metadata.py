@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from ..models.schemas import MetadataRequest, MetadataDraft
 from ..services.metadata_gen import generate_description, generate_chapters, generate_tags
-from ..services.project_utils import find_best_transcript as get_best_transcript, PROJECTS_DIR
+from ..services.project_utils import find_best_transcript as get_best_transcript, PROJECTS_DIR, validate_project_name
 
 router = APIRouter(prefix="/api/metadata", tags=["metadata"])
 
@@ -43,6 +43,7 @@ async def generate(req: MetadataRequest):
 @router.get("/{project_name}")
 async def get_metadata(project_name: str):
     """Get generated metadata."""
+    validate_project_name(project_name)
     metadata_dir = PROJECTS_DIR / project_name / "metadata"
     result = {}
 
@@ -63,6 +64,7 @@ async def get_metadata(project_name: str):
 @router.post("/{project_name}/save")
 async def save_metadata(project_name: str, draft: MetadataDraft):
     """Save edited metadata."""
+    validate_project_name(project_name)
     metadata_dir = PROJECTS_DIR / project_name / "metadata"
     metadata_dir.mkdir(exist_ok=True)
 

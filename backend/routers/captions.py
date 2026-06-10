@@ -7,7 +7,7 @@ from ..services.caption_gen import (
     save_captions, STYLES,
 )
 from ..services.ffmpeg_service import get_video_params, burn_captions
-from ..services.project_utils import find_video as find_source_video, find_best_transcript as get_best_transcript, PROJECTS_DIR
+from ..services.project_utils import find_video as find_source_video, find_best_transcript as get_best_transcript, PROJECTS_DIR, validate_project_name
 from ..services import task_manager as tm
 
 router = APIRouter(prefix="/api/captions", tags=["captions"])
@@ -67,6 +67,7 @@ async def generate(req: CaptionRequest):
 
 @router.get("/{project_name}")
 async def get_captions(project_name: str):
+    validate_project_name(project_name)
     captions_path = PROJECTS_DIR / project_name / "captions" / "captions.json"
     if not captions_path.exists():
         raise HTTPException(404, "Captions not generated yet")
@@ -76,6 +77,7 @@ async def get_captions(project_name: str):
 
 @router.get("/{project_name}/srt")
 async def get_srt(project_name: str):
+    validate_project_name(project_name)
     srt_path = PROJECTS_DIR / project_name / "captions" / "captions.srt"
     if not srt_path.exists():
         raise HTTPException(404, "SRT not generated yet")
@@ -85,6 +87,7 @@ async def get_srt(project_name: str):
 
 @router.get("/{project_name}/ass")
 async def get_ass(project_name: str):
+    validate_project_name(project_name)
     ass_path = PROJECTS_DIR / project_name / "captions" / "captions.ass"
     if not ass_path.exists():
         raise HTTPException(404, "ASS not generated yet")
@@ -166,6 +169,7 @@ def _resolve_renderer(renderer: str) -> str:
 @router.post("/{project_name}/save")
 async def save_captions_edit(project_name: str, payload: dict):
     """Save edited captions (text, timing, position changes)."""
+    validate_project_name(project_name)
     project_dir = PROJECTS_DIR / project_name
     if not project_dir.exists():
         raise HTTPException(404, "Project not found")

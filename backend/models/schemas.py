@@ -1,10 +1,21 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, StringConstraints
+from typing import Optional, Annotated
 from enum import Enum
 
 
+# Constrained project-name type: alphanumeric start, then alphanumerics, space,
+# dot, dash, underscore. Blocks path separators and ".." traversal at parse time,
+# so every request body carrying a project name is rejected (422) before it can
+# be joined onto a filesystem path. See services/project_utils.validate_project_name.
+ProjectName = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=100,
+                      pattern=r"^[A-Za-z0-9][A-Za-z0-9 ._-]*$"),
+]
+
+
 class ProjectCreate(BaseModel):
-    name: str
+    name: ProjectName
     description: Optional[str] = ""
 
 
@@ -23,7 +34,7 @@ class StageStatus(str, Enum):
 
 
 class AssemblyRequest(BaseModel):
-    project_name: str
+    project_name: ProjectName
     use_intro: bool = False
     use_outro: bool = False
     intro_type: Optional[str] = None  # "default" or "custom"
@@ -31,7 +42,7 @@ class AssemblyRequest(BaseModel):
 
 
 class TranscriptionRequest(BaseModel):
-    project_name: str
+    project_name: ProjectName
     model_size: str = "base"
     engine: str = "auto"           # "faster-whisper", "whisperx", "groq", "auto"
     refine_timestamps: bool = True  # use stable-ts if available
@@ -65,18 +76,18 @@ class CaptionStyle(str, Enum):
 
 
 class CaptionRequest(BaseModel):
-    project_name: str
+    project_name: ProjectName
     style: CaptionStyle = CaptionStyle.CLASSIC
 
 
 class BurnCaptionRequest(BaseModel):
-    project_name: str
+    project_name: ProjectName
     style: CaptionStyle = CaptionStyle.CLASSIC
     renderer: str = "auto"  # "pillow", "moviepy", "auto"
 
 
 class MetadataRequest(BaseModel):
-    project_name: str
+    project_name: ProjectName
 
 
 class MetadataDraft(BaseModel):
@@ -86,13 +97,13 @@ class MetadataDraft(BaseModel):
 
 
 class ExportRequest(BaseModel):
-    project_name: str
+    project_name: ProjectName
 
 
 class TranscriptEditRequest(BaseModel):
-    project_name: str
+    project_name: ProjectName
     segments: list[TranscriptSegment]
 
 
 class CleanupRequest(BaseModel):
-    project_name: str
+    project_name: ProjectName
