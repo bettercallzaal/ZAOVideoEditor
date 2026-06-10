@@ -97,7 +97,7 @@ export default function ClipsPanel({ projectName, stages, onSeek }) {
     try {
       const clipList = await listClips(projectName);
       setClips(clipList);
-    } catch (e) { /* no clips yet */ }
+    } catch { /* no clips yet */ }
   };
 
   useEffect(() => { loadClips(); }, []);
