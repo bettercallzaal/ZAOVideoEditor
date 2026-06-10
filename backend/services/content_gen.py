@@ -241,3 +241,57 @@ def _parse_timestamp(ts: str) -> float:
     elif len(parts) == 2:
         return int(parts[0]) * 60 + float(parts[1])
     return 0.0
+
+
+def generate_clip_copy(segments: list, project_name: str = "",
+                       fallback_title: str = "") -> dict:
+    """Draft post copy for a single clip from its transcript window.
+
+    Returns {"title", "caption", "hashtags": [...], "model"}. Best-effort: with
+    no LLM configured it returns a fallback built from the transcript so the clip
+    pipeline never blocks on copy.
+    """
+    text = " ".join(s.get("text", "") for s in segments).strip()
+    fallback = {
+        "title": (fallback_title or text[:60]).strip() or "Clip",
+        "caption": text[:200].strip(),
+        "hashtags": ["#ZAO", "#clips"],
+        "model": None,
+    }
+
+    client, model = _get_client()
+    if not client or not text:
+        return fallback
+
+    prompt = f"""You are a short-form social editor for the project "{project_name}".
+Write post copy for this clip. Return ONLY valid JSON, no markdown fences:
+{{
+  "title": "a punchy 4-8 word hook title",
+  "caption": "a 1-2 sentence caption that makes someone stop scrolling",
+  "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4"]
+}}
+
+CLIP TRANSCRIPT:
+{text[:4000]}"""
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.8,
+            max_tokens=400,
+        )
+        raw = response.choices[0].message.content.strip()
+        raw = re.sub(r'<think>[\s\S]*?</think>\s*', '', raw)
+        if raw.startswith("```"):
+            raw = re.sub(r'^```(?:json)?\s*', '', raw)
+            raw = re.sub(r'\s*```$', '', raw)
+        data = json.loads(raw)
+        return {
+            "title": (data.get("title") or fallback["title"]).strip(),
+            "caption": (data.get("caption") or fallback["caption"]).strip(),
+            "hashtags": data.get("hashtags") or fallback["hashtags"],
+            "model": model,
+        }
+    except Exception:
+        return fallback
