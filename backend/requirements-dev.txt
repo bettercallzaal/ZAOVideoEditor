@@ -1,0 +1,9 @@
+# Lightweight deps for running the test suite in CI.
+# Excludes the heavy optional stack (torch, pyannote, whisperx) - the tests mock
+# subprocess/LLM and never import those.
+fastapi==0.115.6
+pydantic==2.10.4
+python-multipart==0.0.20
+pillow==12.1.1
+numpy
+pytest

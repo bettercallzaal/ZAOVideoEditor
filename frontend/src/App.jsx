@@ -20,7 +20,7 @@ export default function App() {
     try {
       const data = await listProjects();
       setProjects(data);
-    } catch (e) {
+    } catch {
       // If backend is unreachable, switch to standalone YouTube-only mode
       console.error('Backend not available, switching to standalone mode');
       setStandalone(true);
