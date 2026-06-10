@@ -72,6 +72,20 @@ pip install moviepy         # Single-pass caption burn (no batch ffmpeg)
 
 The system falls back gracefully — everything works with just the core dependencies.
 
+### Environment variables (optional)
+
+Every key is optional - the core pipeline runs fully local with none of them. They only unlock extra engines:
+
+```bash
+cp .env.example .env   # then fill in the keys you want
+```
+
+| Variable | Unlocks |
+|----------|---------|
+| `GROQ_API_KEY` | Fast cloud Whisper transcription (the "groq" engine) |
+| `HF_TOKEN` | Speaker diarization (gated pyannote models) |
+| `OPENAI_API_KEY` | Cloud LLM for content generation + transcript polish (Ollama is tried first) |
+
 ### Run
 
 ```bash
@@ -595,4 +609,4 @@ This is scoped for one creator making YouTube-ready conversation videos:
 
 ## License
 
-Private project.
+MIT - see [LICENSE](./LICENSE).
