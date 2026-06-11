@@ -52,6 +52,9 @@ def main():
     ap.add_argument("--quality", default="standard", choices=["fast", "standard", "high"])
     ap.add_argument("--out", default=None, help="directory to write transcript files")
     ap.add_argument("--no-llm", action="store_true", help="skip the LLM readable pass (deterministic clean-up only)")
+    ap.add_argument("--render", default=None, metavar="OUT.mp4",
+                    help="also render a trimmed master applying the auto edit sheet (video input only)")
+    ap.add_argument("--falsestarts", action="store_true", help="include LLM-suggested false-start cuts (review-only)")
     args = ap.parse_args()
 
     media, _ = _maybe_download(args.source)
@@ -61,10 +64,20 @@ def main():
 
     result = process_recording(
         media, title=args.title, quality=args.quality,
-        out_dir=args.out, readable_llm=not args.no_llm, on_progress=progress,
+        out_dir=args.out, readable_llm=not args.no_llm,
+        suggest_falsestarts=args.falsestarts, on_progress=progress,
     )
 
-    print(f"\nSegments: {result['segment_count']}  |  readable backend: {result['readable_backend']}")
+    sheet = result["edit_sheet"]
+    enabled = [c for c in sheet["cuts"] if c.get("enabled")]
+    print(f"\nSegments: {result['segment_count']}  |  duration: {result['duration']}s  |  readable backend: {result['readable_backend']}")
+    print(f"Cut plan: {len(sheet['cuts'])} cuts ({len(enabled)} enabled by default)")
+
+    if args.render:
+        from backend.services.render_service import render_cuts
+        print(f"Rendering trimmed master -> {args.render} ...", file=sys.stderr)
+        stats = render_cuts(media, sheet, args.render)
+        print(f"Rendered {args.render}: removed {stats['removed_seconds']}s, {stats['duration_out']}s out")
     if result["review_flags"]:
         print(f"\nReview flags ({len(result['review_flags'])}) - confirm these by hand:")
         for f in result["review_flags"]:

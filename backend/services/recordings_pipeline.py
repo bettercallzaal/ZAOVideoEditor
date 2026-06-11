@@ -17,6 +17,7 @@ from typing import Callable, Optional
 from .whisper_service import transcribe_audio
 from .glossary import load_corrections, correct_transcript_text
 from .readable_pass import make_readable
+from .cut_planner import build_edit_sheet
 
 
 AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"}
@@ -61,11 +62,13 @@ def _dedupe_flags(flags: list) -> list:
 
 def process_recording(media_path: str, title: str = "", quality: str = "standard",
                       out_dir: Optional[str] = None, readable_llm: bool = True,
+                      plan_cuts: bool = True, suggest_falsestarts: bool = False,
                       on_progress: Optional[Callable[[int, str], None]] = None) -> dict:
     """Run the headless transcript pipeline on a media file.
 
     Returns a dict with the corrected segments, the readable markdown, review
-    flags, glossary changes, and (if out_dir given) the written file paths.
+    flags, glossary changes, an edit sheet (cut plan), and (if out_dir given) the
+    written file paths.
     """
     def progress(pct, msg):
         if on_progress:
@@ -89,6 +92,7 @@ def process_recording(media_path: str, title: str = "", quality: str = "standard
             tmp.unlink()
 
     segments = data.get("segments", [])
+    duration = data.get("duration") or (segments[-1].get("end", 0.0) if segments else 0.0)
 
     progress(80, "Applying brand glossary...")
     corr = load_corrections()
@@ -100,18 +104,25 @@ def process_recording(media_path: str, title: str = "", quality: str = "standard
         all_changes.extend(res["safe_changes"])
     review_flags = _dedupe_flags(all_flags)
 
-    progress(88, "Writing readable transcript...")
+    progress(85, "Planning cuts...")
+    edit_sheet = build_edit_sheet(
+        segments, duration, include_falsestarts=suggest_falsestarts,
+    ) if plan_cuts else {"duration": duration, "cuts": []}
+
+    progress(90, "Writing readable transcript...")
     readable = make_readable(segments, title=title, deterministic_only=not readable_llm)
 
     result = {
         "title": title,
         "segment_count": len(segments),
+        "duration": round(duration, 2),
         "segments": segments,
         "cut_transcript_md": _cut_transcript_md(segments, title),
         "readable_markdown": readable["markdown"],
         "readable_backend": readable["backend"],
         "review_flags": review_flags,
         "glossary_changes": all_changes,
+        "edit_sheet": edit_sheet,
     }
 
     if out_dir:
@@ -122,12 +133,14 @@ def process_recording(media_path: str, title: str = "", quality: str = "standard
         (out / f"{slug}.cut.md").write_text(result["cut_transcript_md"], encoding="utf-8")
         (out / f"{slug}.readable.md").write_text(result["readable_markdown"], encoding="utf-8")
         (out / f"{slug}.review-flags.json").write_text(json.dumps(review_flags, indent=2), encoding="utf-8")
+        (out / f"{slug}.edit-sheet.json").write_text(json.dumps(edit_sheet, indent=2), encoding="utf-8")
         result["output_dir"] = str(out)
         result["files"] = {
             "cut_json": f"{slug}.cut.json",
             "cut_md": f"{slug}.cut.md",
             "readable_md": f"{slug}.readable.md",
             "review_flags": f"{slug}.review-flags.json",
+            "edit_sheet": f"{slug}.edit-sheet.json",
         }
 
     progress(100, "Done")
