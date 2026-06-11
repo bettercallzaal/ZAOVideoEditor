@@ -55,6 +55,10 @@ def main():
     ap.add_argument("--render", default=None, metavar="OUT.mp4",
                     help="also render a trimmed master applying the auto edit sheet (video input only)")
     ap.add_argument("--falsestarts", action="store_true", help="include LLM-suggested false-start cuts (review-only)")
+    ap.add_argument("--publish-dir", default=None, help="build the /recordings/N publish bundle into DIR")
+    ap.add_argument("--number", type=int, default=None, help="recording number N (for --publish-dir)")
+    ap.add_argument("--date", default="", help="recording date YYYY-MM-DD (for --publish-dir)")
+    ap.add_argument("--presenter", default="", help="presenter name (for the transcript filename)")
     args = ap.parse_args()
 
     media, _ = _maybe_download(args.source)
@@ -78,6 +82,19 @@ def main():
         print(f"Rendering trimmed master -> {args.render} ...", file=sys.stderr)
         stats = render_cuts(media, sheet, args.render)
         print(f"Rendered {args.render}: removed {stats['removed_seconds']}s, {stats['duration_out']}s out")
+
+    if args.publish_dir:
+        if args.number is None:
+            sys.exit("--publish-dir requires --number")
+        from backend.services.publish_service import build_bundle
+        bundle = build_bundle(
+            result, args.number, args.date or "0000-00-00",
+            presenter=args.presenter, topic=args.title, out_dir=args.publish_dir,
+        )
+        print(f"\nPublish bundle for recording {args.number} -> {bundle['output_dir']}:")
+        print(f"  transcript: transcripts/{bundle['transcript_filename']}")
+        print(f"  page: recordings/{args.number}.md")
+        print(f"  recap: recap-{args.number}.json")
     if result["review_flags"]:
         print(f"\nReview flags ({len(result['review_flags'])}) - confirm these by hand:")
         for f in result["review_flags"]:
