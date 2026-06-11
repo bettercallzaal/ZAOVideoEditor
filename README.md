@@ -6,6 +6,20 @@ Upload a video, transcribe it locally, clean up the transcript, generate branded
 
 ---
 
+## Easiest way to run (Recordings Studio)
+
+One command. It sets up everything on first run, starts the app, and opens your browser:
+
+```bash
+./run.sh
+```
+
+Then drag a workshop or show recording onto the page. You get a clean transcript, a brand-corrected readable transcript (WaveWarZ / SongJam / Stilo World etc. fixed automatically), the list of terms to review by hand, and a one-click trimmed video - all downloadable. No Node, no Supabase, no cloud, no flags. Requires `ffmpeg` on your PATH (`brew install ffmpeg`).
+
+For the full multi-step editor, the CLI, and the team review UI, read on.
+
+---
+
 ## What It Does
 
 The full workflow in one app:

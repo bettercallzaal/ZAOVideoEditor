@@ -2,10 +2,10 @@ import traceback
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from pathlib import Path
 
-from .routers import projects, assembly, transcription, transcript, captions, metadata, export, speakers, fillers, clips, silence, ai_tools, youtube, content, batch, templates, pipeline, ingest, recordings
+from .routers import projects, assembly, transcription, transcript, captions, metadata, export, speakers, fillers, clips, silence, ai_tools, youtube, content, batch, templates, pipeline, ingest, recordings, studio
 
 app = FastAPI(title="ZAO Video Editor", version="0.1.0")
 
@@ -53,9 +53,20 @@ app.include_router(templates.router)
 app.include_router(pipeline.router)
 app.include_router(ingest.router)
 app.include_router(recordings.router)
+app.include_router(studio.router)
 
 # Serve video files from projects directory
 PROJECTS_DIR = Path(__file__).parent.parent / "projects"
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+@app.get("/", response_class=HTMLResponse)
+async def studio_home():
+    """The one-command Studio app - drag a recording, get transcripts + a trim."""
+    page = STATIC_DIR / "studio.html"
+    if page.exists():
+        return HTMLResponse(page.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>ZAO Video Editor</h1><p>Studio page not found.</p>")
 
 
 @app.get("/api/serve-video/{project_name}/{subpath:path}")

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ZAO Recordings Studio</title>
+<style>
+  :root { --bg:#070709; --panel:#121218; --orange:#ff6b35; --cyan:#00e5ff; --line:#26262e; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:#e8e8ea; font:15px/1.5 ui-sans-serif,system-ui,sans-serif; }
+  header { padding:20px 24px; border-bottom:1px solid var(--line); }
+  h1 { margin:0; color:var(--orange); font-size:20px; }
+  header p { margin:4px 0 0; color:#8a8a94; font-size:13px; }
+  main { max-width:880px; margin:0 auto; padding:24px; }
+  .drop { border:2px dashed var(--line); border-radius:12px; padding:40px; text-align:center; cursor:pointer; transition:.15s; }
+  .drop.over { border-color:var(--orange); background:rgba(255,107,53,.06); }
+  .drop strong { color:#e8e8ea; }
+  .drop small { color:#8a8a94; }
+  input[type=text] { width:100%; margin-top:14px; background:#0d0d12; border:1px solid var(--line); border-radius:8px; padding:10px 12px; color:#e8e8ea; }
+  button { background:var(--orange); color:#0a0a0a; border:0; border-radius:8px; padding:10px 16px; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.4; cursor:default; }
+  button.ghost { background:transparent; color:#cfcfd6; border:1px solid var(--line); }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:14px; }
+  .bar { height:8px; background:#1d1d24; border-radius:99px; overflow:hidden; margin-top:14px; }
+  .bar > div { height:100%; background:var(--orange); width:0; transition:width .3s; }
+  .muted { color:#8a8a94; font-size:13px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px; margin-top:18px; }
+  .panel h2 { margin:0 0 10px; font-size:15px; color:var(--cyan); }
+  pre { white-space:pre-wrap; word-wrap:break-word; background:#0d0d12; border:1px solid var(--line); border-radius:8px; padding:14px; max-height:380px; overflow:auto; font:13px/1.6 ui-monospace,monospace; }
+  .flag { font-size:13px; padding:6px 0; border-bottom:1px solid var(--line); }
+  .flag b { color:var(--orange); }
+  a.dl { color:var(--cyan); text-decoration:none; font-size:13px; margin-right:16px; }
+  a.dl:hover { text-decoration:underline; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ZAO Recordings Studio</h1>
+  <p>Drop a workshop or show recording. Get a clean transcript, a brand-corrected read, and a trimmed video. No setup.</p>
+</header>
+<main>
+  <div id="drop" class="drop">
+    <strong>Drop a recording here</strong> or click to choose<br/>
+    <small>mp4, mov, mkv, webm, or an audio file</small>
+    <input id="file" type="file" accept="video/*,audio/*" class="hidden" />
+  </div>
+  <input id="title" type="text" placeholder="Title (optional - defaults to the filename)" />
+  <div class="row">
+    <button id="go" disabled>Process recording</button>
+    <span id="picked" class="muted"></span>
+  </div>
+
+  <div id="progress" class="panel hidden">
+    <h2>Working</h2>
+    <div class="bar"><div id="barfill"></div></div>
+    <p id="status" class="muted">Starting...</p>
+  </div>
+
+  <div id="results" class="hidden">
+    <div class="panel">
+      <h2>Outputs</h2>
+      <div class="row" id="downloads"></div>
+      <div class="row">
+        <button id="render" class="ghost">Make trimmed video</button>
+        <span id="cutinfo" class="muted"></span>
+      </div>
+    </div>
+    <div class="panel" id="flagspanel">
+      <h2>Review these by hand</h2>
+      <div id="flags"></div>
+    </div>
+    <div class="panel">
+      <h2>Readable transcript</h2>
+      <pre id="readable"></pre>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let chosen = null, project = null;
+
+const drop = $("drop"), fileInput = $("file");
+drop.onclick = () => fileInput.click();
+["dragover","dragenter"].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", ev => { if (ev.dataTransfer.files[0]) setFile(ev.dataTransfer.files[0]); });
+fileInput.onchange = () => { if (fileInput.files[0]) setFile(fileInput.files[0]); };
+
+function setFile(f) {
+  chosen = f;
+  $("picked").textContent = f.name + " (" + (f.size/1048576).toFixed(1) + " MB)";
+  $("go").disabled = false;
+  if (!$("title").value) $("title").value = f.name.replace(/\.[^.]+$/, "");
+}
+
+async function pollTask(taskId, onProgress) {
+  for (;;) {
+    const t = await fetch(`/api/tasks/${taskId}`).then(r => r.json());
+    onProgress(t);
+    if (t.status === "complete") return t;
+    if (t.status === "error") throw new Error(t.error || "Task failed");
+    await new Promise(r => setTimeout(r, 1200));
+  }
+}
+
+function setProgress(pct, msg) { $("barfill").style.width = (pct||0) + "%"; $("status").textContent = msg || ""; }
+
+$("go").onclick = async () => {
+  if (!chosen) return;
+  $("go").disabled = true;
+  $("results").classList.add("hidden");
+  $("progress").classList.remove("hidden");
+  setProgress(2, "Uploading...");
+  try {
+    const fd = new FormData();
+    fd.append("file", chosen);
+    fd.append("title", $("title").value);
+    const res = await fetch("/api/studio/process", { method: "POST", body: fd }).then(r => r.json());
+    project = res.project;
+    await pollTask(res.task_id, t => setProgress(t.progress, t.message));
+    await showResults();
+  } catch (e) {
+    setProgress(100, "Error: " + e.message);
+  } finally {
+    $("go").disabled = false;
+  }
+};
+
+async function showResults() {
+  const r = await fetch(`/api/studio/${project}/result`).then(x => x.json());
+  $("progress").classList.add("hidden");
+  $("results").classList.remove("hidden");
+  $("readable").textContent = r.readable || "(empty)";
+
+  const dl = $("downloads"); dl.innerHTML = "";
+  dl.innerHTML = `
+    <a class="dl" href="/api/studio/${project}/download/readable">Download readable transcript</a>
+    <a class="dl" href="/api/studio/${project}/download/cut">Download timestamped transcript</a>
+    <a class="dl" href="/api/studio/${project}/download/editsheet">Download edit sheet</a>`;
+
+  const enabled = (r.edit_sheet.cuts || []).filter(c => c.enabled).length;
+  $("cutinfo").textContent = `${(r.edit_sheet.cuts||[]).length} cuts planned, ${enabled} on by default`;
+
+  const fp = $("flags");
+  if (!r.review_flags.length) { $("flagspanel").classList.add("hidden"); }
+  else {
+    $("flagspanel").classList.remove("hidden");
+    fp.innerHTML = r.review_flags.map(f =>
+      `<div class="flag"><b>${f.term}</b>${f.suggestion ? " &rarr; " + f.suggestion : ""} <span class="muted">${f.note||""}</span></div>`).join("");
+  }
+  if (r.has_trimmed) addTrimmedLink();
+}
+
+function addTrimmedLink() {
+  if (document.getElementById("trimdl")) return;
+  const a = document.createElement("a");
+  a.id = "trimdl"; a.className = "dl"; a.href = `/api/studio/${project}/download/trimmed`;
+  a.textContent = "Download trimmed video";
+  $("downloads").appendChild(a);
+}
+
+$("render").onclick = async () => {
+  $("render").disabled = true;
+  $("cutinfo").textContent = "Rendering...";
+  try {
+    const res = await fetch(`/api/studio/${project}/render`, { method: "POST" }).then(r => r.json());
+    await pollTask(res.task_id, t => { $("cutinfo").textContent = t.message; });
+    $("cutinfo").textContent = "Trimmed video ready";
+    addTrimmedLink();
+  } catch (e) {
+    $("cutinfo").textContent = "Error: " + e.message;
+  } finally {
+    $("render").disabled = false;
+  }
+};
+</script>
+</body>
+</html>
