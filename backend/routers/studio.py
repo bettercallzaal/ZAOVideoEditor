@@ -13,6 +13,7 @@ from pathlib import Path
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse, HTMLResponse
+from pydantic import BaseModel
 
 from ..services import recordings_pipeline as rp
 from ..services import task_manager as tm
@@ -60,11 +61,10 @@ def _make_project(name: str, title: str, source: str) -> Path:
 
 def _do_process(task_id: str, project_dir: Path, media: str, title: str,
                 speakers: bool, quality: str = "fast"):
-    if speakers:
-        _annotate_speakers(task_id, project_dir, media)
     result = rp.process_recording(
         media, title=title, quality=quality, engine="auto",
         out_dir=str(project_dir / "transcripts"), readable_llm=True,
+        detect_speakers=speakers,
         on_progress=lambda pct, msg: tm.update_task(task_id, progress=pct, message=msg),
     )
     return {
@@ -75,18 +75,6 @@ def _do_process(task_id: str, project_dir: Path, media: str, title: str,
         "edit_sheet": result["edit_sheet"],
         "readable_backend": result["readable_backend"],
     }
-
-
-def _annotate_speakers(task_id: str, project_dir: Path, media: str):
-    """Best-effort diarization (pyannote, energy-based fallback). Never blocks."""
-    try:
-        from ..services.diarization import diarize_audio
-        tm.update_task(task_id, progress=8, message="Detecting speakers...")
-        turns = diarize_audio(media)
-        (project_dir / "transcripts" / "speakers.json").write_text(
-            json.dumps(turns), encoding="utf-8")
-    except Exception as e:
-        print(f"Speaker detection skipped: {e}")
 
 
 @router.post("/process")
@@ -315,6 +303,185 @@ async def make_socials(project: str):
     task_id = tm.create_task(project, "studio_socials")
     tm.run_in_background(task_id, _do_socials, project_dir)
     return {"task_id": task_id}
+
+
+def _do_full(task_id: str, project_dir: Path, media: str, title: str,
+             speakers: bool, quality: str, clips: bool, socials: bool, aspects: list):
+    """One-call pipeline for external automation: process -> clips -> socials."""
+    out = _do_process(task_id, project_dir, media, title, speakers, quality)
+    result = {"project": project_dir.name, "process": out}
+    if clips:
+        from ..services import recordings_export as rx
+        segs = json.loads(_cut_json_path(project_dir).read_text())
+        master = project_dir / "processing" / "trimmed.mp4"
+        src = str(master) if master.exists() else media
+        tm.update_task(task_id, progress=70, message="Rendering clips...")
+        result["clips"] = rx.render_clips(src, segs, project_dir / "clips",
+                                          aspects=aspects, project_name=project_dir.name)
+    if socials:
+        tm.update_task(task_id, progress=88, message="Drafting social posts...")
+        result["socials"] = _do_socials(task_id, project_dir)
+    tm.update_task(task_id, progress=100, message="Done")
+    return result
+
+
+@router.post("/full")
+async def full(file: UploadFile = File(None), url: str = Form(""), title: str = Form(""),
+               speakers: bool = Form(False), quality: str = Form("fast"),
+               clips: bool = Form(True), socials: bool = Form(True), aspects: str = Form("9:16")):
+    """One call -> the whole pipeline. For automation / calling from other tools.
+
+    Provide either an uploaded `file` or a `url`. Returns {project, task_id}; poll
+    /api/tasks/{task_id} for {process, clips, socials} in the result.
+    """
+    asp = [a.strip() for a in aspects.split(",") if a.strip()] or ["9:16"]
+    if file is not None and file.filename:
+        ext = Path(file.filename).suffix.lower()
+        if ext not in VIDEO_EXTS and ext not in AUDIO_EXTS:
+            raise HTTPException(400, f"Unsupported file type: {ext}")
+        disp = title or Path(file.filename).stem
+        project_dir = _make_project(_slug(disp), disp, "api")
+        dest = project_dir / "input" / f"main{ext}"
+        with open(dest, "wb") as f:
+            while chunk := await file.read(1024 * 1024):
+                f.write(chunk)
+        media = str(dest)
+        run = lambda tid: _do_full(tid, project_dir, media, disp, speakers, quality, clips, socials, asp)  # noqa: E731
+    elif url:
+        from ..services import ingest_service
+        if not ingest_service.yt_dlp_available():
+            raise HTTPException(400, "yt-dlp not installed")
+        disp = title or "api recording"
+        project_dir = _make_project(_slug(disp), disp, "api-link")
+
+        def run(tid):
+            ingest_service.download_to_project(
+                url, project_dir,
+                on_progress=lambda pct, msg: tm.update_task(tid, progress=min(int(pct * 0.3), 30), message=msg))
+            return _do_full(tid, project_dir, str(_find_input(project_dir)), disp, speakers, quality, clips, socials, asp)
+    else:
+        raise HTTPException(422, "Provide a file or a url")
+
+    task_id = tm.create_task(project_dir.name, "studio_full")
+    tm.run_in_background(task_id, lambda tid: run(tid))
+    return {"project": project_dir.name, "task_id": task_id}
+
+
+def _cut_json_path(project_dir: Path):
+    return next((project_dir / "transcripts").glob("*.cut.json"), None)
+
+
+def _edit_sheet_path(project_dir: Path):
+    return next((project_dir / "transcripts").glob("*.edit-sheet.json"), None)
+
+
+@router.get("/{project}/segments")
+async def get_segments(project: str):
+    """The corrected, word-timestamped segments (for the editor) + speakers."""
+    project_dir = _project_dir(project)
+    cut = _cut_json_path(project_dir)
+    if not cut:
+        raise HTTPException(404, "No transcript - process first")
+    segments = json.loads(cut.read_text())
+    speakers = sorted({s["speaker"] for s in segments if s.get("speaker")})
+    return {"segments": segments, "speakers": speakers}
+
+
+class SaveTranscript(BaseModel):
+    segments: list
+
+
+@router.post("/{project}/transcript")
+async def save_transcript(project: str, body: SaveTranscript):
+    """Save edited segments (word fixes) and regenerate the readable transcript."""
+    project_dir = _project_dir(project)
+    cut = _cut_json_path(project_dir)
+    if not cut:
+        raise HTTPException(404, "No transcript")
+    from ..services.recordings_pipeline import _cut_transcript_md
+    from ..services.readable_pass import make_readable
+    segs = body.segments
+    cut.write_text(json.dumps(segs, indent=2), encoding="utf-8")
+    slug = cut.stem.replace(".cut", "")
+    title = _project_title(project_dir)
+    (project_dir / "transcripts" / f"{slug}.cut.md").write_text(
+        _cut_transcript_md(segs, title), encoding="utf-8")
+    readable = make_readable(segs, title=title, deterministic_only=True)
+    (project_dir / "transcripts" / f"{slug}.readable.md").write_text(
+        readable["markdown"], encoding="utf-8")
+    return {"ok": True}
+
+
+class RenameSpeakers(BaseModel):
+    mapping: dict   # {"SPEAKER_00": "Zaal", ...}
+
+
+@router.post("/{project}/speakers")
+async def rename_speakers_ep(project: str, body: RenameSpeakers):
+    """Rename speaker labels across the transcript."""
+    project_dir = _project_dir(project)
+    cut = _cut_json_path(project_dir)
+    if not cut:
+        raise HTTPException(404, "No transcript")
+    from ..services.diarization import rename_speakers
+    segs = rename_speakers(json.loads(cut.read_text()), body.mapping)
+    cut.write_text(json.dumps(segs, indent=2), encoding="utf-8")
+    return {"ok": True, "speakers": sorted({s["speaker"] for s in segs if s.get("speaker")})}
+
+
+class SaveCuts(BaseModel):
+    cuts: list
+
+
+@router.post("/{project}/cuts")
+async def save_cuts(project: str, body: SaveCuts):
+    """Persist the cut enabled/disabled states (the review decisions)."""
+    project_dir = _project_dir(project)
+    sheet_file = _edit_sheet_path(project_dir)
+    if not sheet_file:
+        raise HTTPException(404, "No edit sheet")
+    sheet = json.loads(sheet_file.read_text())
+    sheet["cuts"] = body.cuts
+    sheet_file.write_text(json.dumps(sheet, indent=2), encoding="utf-8")
+    return {"ok": True}
+
+
+class TeachTerm(BaseModel):
+    wrong: str
+    right: str
+
+
+@router.post("/glossary")
+async def teach_glossary(body: TeachTerm):
+    """Add a brand correction so every future recording gets it right."""
+    from ..services.glossary import add_safe_correction
+    try:
+        add_safe_correction(body.wrong, body.right)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return {"ok": True, "added": {body.wrong: body.right}}
+
+
+@router.get("/{project}/video")
+async def serve_input_video(project: str):
+    """Serve the source recording for the in-page player."""
+    project_dir = _project_dir(project)
+    media = _find_input(project_dir)
+    suffix = media.suffix.lower()
+    types = {".mp4": "video/mp4", ".mov": "video/quicktime", ".mkv": "video/x-matroska",
+             ".webm": "video/webm", ".wav": "audio/wav", ".mp3": "audio/mpeg", ".m4a": "audio/mp4"}
+    return FileResponse(str(media), media_type=types.get(suffix, "application/octet-stream"),
+                        headers={"Accept-Ranges": "bytes"})
+
+
+def _project_title(project_dir: Path) -> str:
+    pj = project_dir / "project.json"
+    if pj.exists():
+        try:
+            return json.loads(pj.read_text()).get("title", project_dir.name)
+        except (ValueError, OSError):
+            pass
+    return project_dir.name
 
 
 @router.get("/page", response_class=HTMLResponse)
