@@ -58,9 +58,32 @@ def burn_master_captions(master_path: str, captions: list, out_path: str,
     return {"output": out.name, "captioned": captioned}
 
 
-def plan_clips(segments: list, count: int = 6,
-               min_duration: float = 30.0, max_duration: float = 90.0) -> list:
-    """Highlight ranges for clips. Works without the PR #5 render code."""
+def plan_clips(segments: list, count: int = 6, min_duration: float = 30.0,
+               max_duration: float = 90.0, use_llm: bool = True) -> list:
+    """Highlight ranges for clips.
+
+    LLM-ranked by default (picks the genuinely clippable moments, not just
+    keyword density) via content_gen.generate_recap_and_clips. Falls back to the
+    keyword highlighter when no LLM backend is configured.
+    """
+    if use_llm:
+        try:
+            from .content_gen import generate_recap_and_clips
+            result = generate_recap_and_clips(segments)
+            out = []
+            for c in result.get("clips", [])[:count]:
+                s, e = c.get("start_seconds", 0), c.get("end_seconds", 0)
+                if e > s:
+                    out.append({
+                        "start": round(float(s), 2), "end": round(float(e), 2),
+                        "duration": round(float(e) - float(s), 1),
+                        "title": c.get("title", ""), "hook": c.get("hook", ""),
+                        "reason": c.get("why_clip", ""), "score": 90, "source": "llm",
+                    })
+            if out:
+                return out
+        except Exception as e:
+            print(f"LLM highlight ranking unavailable, using keyword detector: {e}")
     return detect_highlights(
         segments, min_duration=min_duration, max_duration=max_duration, count=count,
     )

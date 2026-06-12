@@ -367,6 +367,66 @@ async def full(file: UploadFile = File(None), url: str = Form(""), title: str = 
     return {"project": project_dir.name, "task_id": task_id}
 
 
+@router.get("/projects")
+async def list_projects():
+    """The recordings library - every project, newest first."""
+    if not PROJECTS_DIR.exists():
+        return []
+    out = []
+    for d in PROJECTS_DIR.iterdir():
+        if not d.is_dir() or not (d / "project.json").exists():
+            continue
+        try:
+            info = json.loads((d / "project.json").read_text())
+        except (ValueError, OSError):
+            info = {}
+        has_transcript = bool(next((d / "transcripts").glob("*.cut.json"), None)) if (d / "transcripts").exists() else False
+        out.append({
+            "project": d.name,
+            "title": info.get("title", d.name),
+            "created_at": info.get("created_at", ""),
+            "source": info.get("source", ""),
+            "ready": has_transcript,
+            "has_trimmed": (d / "processing" / "trimmed.mp4").exists(),
+            "clips": len(list((d / "clips").glob("*.mp4"))) if (d / "clips").exists() else 0,
+        })
+    out.sort(key=lambda p: p.get("created_at", ""), reverse=True)
+    return out
+
+
+def _do_insights(task_id: str, project_dir: Path):
+    """Recap + chapters + quotes + action items from the transcript (one LLM call)."""
+    from ..services.content_gen import generate_recap_and_clips
+    segs = json.loads(_cut_json_path(project_dir).read_text())
+    tm.update_task(task_id, progress=40, message="Reading the recording...")
+    try:
+        res = generate_recap_and_clips(segs, project_name=_project_title(project_dir))
+    except Exception as e:
+        raise RuntimeError(f"Insights need an LLM (claude CLI or OPENAI/GROQ key): {e}")
+    insights = {
+        "recap": res.get("recap", ""),
+        "chapters": res.get("chapters", []),
+        "quotes": res.get("quotes", []),
+        "show_notes": res.get("show_notes", ""),
+    }
+    (project_dir / "metadata").mkdir(parents=True, exist_ok=True)
+    (project_dir / "metadata" / "insights.json").write_text(json.dumps(insights, indent=2), encoding="utf-8")
+    tm.update_task(task_id, progress=95, message="Insights ready")
+    return insights
+
+
+@router.post("/{project}/insights")
+async def make_insights(project: str):
+    """Extract a recap, chapters, and key quotes from the recording."""
+    project_dir = _project_dir(project)
+    existing = tm.get_active_task(project, "studio_insights")
+    if existing:
+        return tm.task_to_dict(existing)
+    task_id = tm.create_task(project, "studio_insights")
+    tm.run_in_background(task_id, _do_insights, project_dir)
+    return {"task_id": task_id}
+
+
 def _cut_json_path(project_dir: Path):
     return next((project_dir / "transcripts").glob("*.cut.json"), None)
 
