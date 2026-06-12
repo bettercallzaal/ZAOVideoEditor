@@ -235,6 +235,17 @@ async function loadLibrary(){
 $("newrec").onclick=()=>{ $("intake").classList.remove("hidden"); $("results").classList.add("hidden"); };
 loadLibrary();
 
+let PUB={farcaster:false,x:false,youtube:false};
+fetch("/api/studio/publishers").then(r=>r.json()).then(p=>{PUB=p;}).catch(()=>{});
+async function publish(target,text,btn){
+  btn.disabled=true; const o=btn.textContent; btn.textContent="Posting...";
+  try{ const r=await fetch(`/api/studio/${project}/publish/${target}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})}).then(x=>x.json());
+    if(r.detail) throw new Error(r.detail);
+    btn.textContent="Posted"; if(r.url){ btn.onclick=()=>window.open(r.url,"_blank"); btn.disabled=false; }
+    toast("Posted to "+target);
+  }catch(e){ btn.textContent="Failed"; toast(e.message); setTimeout(()=>{btn.textContent=o;btn.disabled=false;},2200); }
+}
+
 async function pollTask(id,onp){ for(;;){ const t=await fetch(`/api/tasks/${id}`).then(r=>r.json()); onp(t); if(t.status==="complete")return t; if(t.status==="error")throw new Error(t.error||"Task failed"); await new Promise(r=>setTimeout(r,1200)); } }
 function setProgress(p,m){ $("barfill").style.width=(p||0)+"%"; $("status").textContent=m||""; }
 
@@ -364,7 +375,20 @@ $("vid").addEventListener("timeupdate",()=>{
   document.querySelectorAll(".w").forEach(w=>{ const m=+w.dataset.mid; w.classList.toggle("here", t>=+w.dataset.t && t<+w.dataset.t+0.6); });
 });
 
-function addTrimmedLink(){ if(document.getElementById("trimdl"))return; const a=document.createElement("a"); a.id="trimdl"; a.className="dl"; a.href=`/api/studio/${project}/download/trimmed`; a.textContent="Download trimmed video"; $("downloads").appendChild(a); }
+function addTrimmedLink(){
+  if(document.getElementById("trimdl"))return;
+  const a=document.createElement("a"); a.id="trimdl"; a.className="dl"; a.href=`/api/studio/${project}/download/trimmed`; a.textContent="Download trimmed video"; $("downloads").appendChild(a);
+  if(PUB.youtube){ const yb=document.createElement("button"); yb.id="ytbtn"; yb.className="ghost mini"; yb.style.marginLeft="8px"; yb.textContent="Upload to YouTube"; yb.onclick=uploadYouTube; $("downloads").appendChild(yb); }
+}
+async function uploadYouTube(){
+  const yb=$("ytbtn"); yb.disabled=true; yb.textContent="Uploading...";
+  try{ const res=await fetch(`/api/studio/${project}/publish/youtube`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({privacy:"unlisted"})}).then(r=>r.json());
+    if(res.detail) throw new Error(res.detail);
+    const done=await pollTask(res.task_id,t=>{yb.textContent=t.message;});
+    yb.textContent="On YouTube"; if(done.result&&done.result.url){ yb.onclick=()=>window.open(done.result.url,"_blank"); yb.disabled=false; }
+    toast("Uploaded to YouTube");
+  }catch(e){ yb.textContent="Failed"; toast(e.message); setTimeout(()=>{yb.textContent="Upload to YouTube";yb.disabled=false;},2200); }
+}
 $("render").onclick=async()=>{
   $("render").disabled=true; $("cutinfo").textContent="Rendering...";
   try{ await fetch(`/api/studio/${project}/cuts`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({cuts:CUTS})});
@@ -399,7 +423,14 @@ $("makesocials").onclick=async()=>{
     const done=await pollTask(res.task_id,t=>{$("socialinfo").textContent=t.message;}); renderSocials(done.result); $("socialinfo").textContent="";
   }catch(e){ $("socialinfo").textContent="Error: "+e.message; } finally{ $("makesocials").disabled=false; }
 };
-function postBlock(label,text){ const w=document.createElement("div"); w.className="post"; w.innerHTML=`<div class="lab">${label}</div><div class="txt">${text}</div>`; const b=document.createElement("button"); b.className="ghost mini"; b.textContent="Copy"; b.onclick=()=>copyText(text,b); w.appendChild(b); return w; }
+function postBlock(label,text){
+  const w=document.createElement("div"); w.className="post"; w.innerHTML=`<div class="lab">${label}</div><div class="txt">${text}</div>`;
+  const b=document.createElement("button"); b.className="ghost mini"; b.textContent="Copy"; b.onclick=()=>copyText(text,b); w.appendChild(b);
+  const fc=label==="Farcaster"||label.startsWith("Clip"); const isx=label==="X";
+  if(fc && PUB.farcaster){ const pb=document.createElement("button"); pb.className="mini"; pb.style.marginLeft="8px"; pb.textContent="Post to Farcaster"; pb.onclick=()=>publish("farcaster",text,pb); w.appendChild(pb); }
+  if(isx && PUB.x){ const pb=document.createElement("button"); pb.className="mini"; pb.style.marginLeft="8px"; pb.textContent="Post to X"; pb.onclick=()=>publish("x",text,pb); w.appendChild(pb); }
+  return w;
+}
 function renderSocials(s){ const box=$("socials"); box.innerHTML=""; if(!s)return; if(s.episode){ if(s.episode.farcaster)box.appendChild(postBlock("Farcaster",s.episode.farcaster)); if(s.episode.x)box.appendChild(postBlock("X",s.episode.x)); } (s.clips||[]).forEach(c=>box.appendChild(postBlock("Clip - "+c.clip,c.post))); }
 
 $("makeinsights").onclick=async()=>{

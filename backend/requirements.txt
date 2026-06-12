@@ -7,7 +7,8 @@ aiofiles==24.1.0
 pyannote.audio>=3.1
 
 # Optional — install for enhanced features:
-# pip install yt-dlp          # Ingest livestream recordings / VODs by URL
+# pip install yt-dlp           # Ingest livestream recordings / VODs by URL
+# pip install requests-oauthlib # Post to X / Twitter (publishers.py)
 # pip install whisperx        # Better word-level timestamps + diarization
 # pip install stable-ts       # Timestamp refinement post-processing
 # pip install auto-editor     # Automatic silence/dead-air removal

@@ -544,6 +544,67 @@ def _project_title(project_dir: Path) -> str:
     return project_dir.name
 
 
+@router.get("/publishers")
+async def publishers_status():
+    """Which publish targets are configured (so the UI can show/hide buttons)."""
+    from ..services import publishers
+    return publishers.status()
+
+
+class PostText(BaseModel):
+    text: str
+
+
+@router.post("/{project}/publish/farcaster")
+async def publish_farcaster(project: str, body: PostText):
+    _project_dir(project)
+    from ..services import publishers
+    try:
+        return publishers.post_farcaster(body.text)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/{project}/publish/x")
+async def publish_x(project: str, body: PostText):
+    _project_dir(project)
+    from ..services import publishers
+    try:
+        return publishers.post_x(body.text)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+
+
+class YouTubePublish(BaseModel):
+    title: str = ""
+    description: str = ""
+    privacy: str = "unlisted"
+
+
+def _do_youtube(task_id: str, project_dir: Path, title: str, description: str, privacy: str):
+    from ..services import publishers
+    trimmed = project_dir / "processing" / "trimmed.mp4"
+    video = str(trimmed) if trimmed.exists() else str(_find_input(project_dir))
+    tm.update_task(task_id, progress=20, message="Uploading to YouTube...")
+    res = publishers.upload_youtube(video, title or _project_title(project_dir), description, privacy=privacy)
+    tm.update_task(task_id, progress=95, message="Uploaded")
+    return res
+
+
+@router.post("/{project}/publish/youtube")
+async def publish_youtube(project: str, body: YouTubePublish):
+    project_dir = _project_dir(project)
+    from ..services import publishers
+    if not publishers.youtube_configured():
+        raise HTTPException(400, "YouTube not configured: place a Google OAuth credentials.json in backend/")
+    existing = tm.get_active_task(project, "studio_youtube")
+    if existing:
+        return tm.task_to_dict(existing)
+    task_id = tm.create_task(project, "studio_youtube")
+    tm.run_in_background(task_id, _do_youtube, project_dir, body.title, body.description, body.privacy)
+    return {"task_id": task_id}
+
+
 @router.get("/page", response_class=HTMLResponse)
 async def page():
     html = STATIC_DIR / "studio.html"
