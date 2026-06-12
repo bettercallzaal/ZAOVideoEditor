@@ -605,6 +605,39 @@ async def publish_youtube(project: str, body: YouTubePublish):
     return {"task_id": task_id}
 
 
+@router.get("/bonfire-status")
+async def bonfire_status():
+    """Whether Bonfire memory is configured (controls the opt-in button)."""
+    from ..services import bonfire
+    return {"configured": bonfire.configured()}
+
+
+@router.post("/{project}/bonfire")
+async def push_bonfire(project: str):
+    """OPT-IN: post this recording's recap to the ZAO Bonfire knowledge graph.
+
+    Only fires on an explicit request. Requires that key moments were extracted
+    first (uses the saved recap). Never runs automatically.
+    """
+    project_dir = _project_dir(project)
+    from ..services import bonfire
+    insights_file = project_dir / "metadata" / "insights.json"
+    if not insights_file.exists():
+        raise HTTPException(400, "Extract key moments first - there is no recap to save yet")
+    insights = json.loads(insights_file.read_text())
+    date = ""
+    pj = project_dir / "project.json"
+    if pj.exists():
+        try:
+            date = (json.loads(pj.read_text()).get("created_at", "") or "")[:10]
+        except (ValueError, OSError):
+            pass
+    try:
+        return bonfire.post_recording(_project_title(project_dir), insights, date=date)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.get("/page", response_class=HTMLResponse)
 async def page():
     html = STATIC_DIR / "studio.html"
