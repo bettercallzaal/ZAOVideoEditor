@@ -51,6 +51,19 @@
   .seg.active { background:rgba(0,229,255,.07); }
   .seg .spk { font-family:Syne; font-weight:700; font-size:12px; color:var(--cyan); margin-right:8px; text-transform:uppercase; letter-spacing:.04em; }
   .seg .ts { font-family:'JetBrains Mono',monospace; font-size:11px; color:#5a5a64; margin-right:8px; cursor:pointer; }
+  .seg .del { font-size:12px; color:#5a5a64; cursor:pointer; margin-right:6px; opacity:0; transition:.1s; }
+  .seg:hover .del { opacity:1; }
+  .seg.dropped { opacity:.4; }
+  .seg.dropped .w { text-decoration:line-through; color:#54545e; }
+  .libitem { display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; margin-bottom:8px; cursor:pointer; transition:.1s; }
+  .libitem:hover { border-color:var(--orange); }
+  .libitem .lt { font-weight:500; }
+  .libitem .lm { color:var(--mut); font-size:12px; }
+  .libitem .badge { font-family:Syne; font-size:10px; padding:2px 8px; border-radius:99px; background:#1f1f28; color:var(--cyan); text-transform:uppercase; }
+  .chapter { display:flex; gap:10px; font-size:13px; padding:4px 0; }
+  .chapter .ct { font-family:'JetBrains Mono',monospace; color:var(--cyan); cursor:pointer; }
+  .quote { border-left:2px solid var(--orange); padding:4px 0 4px 12px; margin:8px 0; font-size:13px; color:#c8c8d0; }
+  .quote .qm { color:var(--mut); font-size:11px; }
   .w { cursor:pointer; border-radius:3px; padding:0 1px; }
   .w:hover { background:rgba(255,107,53,.18); }
   .w.cut { color:#54545e; text-decoration:line-through; }
@@ -81,6 +94,14 @@
   <p>Recording or link in. Clean transcript, trimmed video, clips, and social posts out.</p>
 </header>
 <main>
+  <div id="library" class="panel hidden" style="margin-top:0">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0">Recent recordings</h2>
+      <button id="newrec" class="ghost mini">New recording</button>
+    </div>
+    <div id="liblist" class="mt"></div>
+  </div>
+
   <div id="intake">
     <div id="drop" class="drop">
       <strong>Drop a recording here</strong> or click to choose<br/>
@@ -160,6 +181,12 @@
         </div>
 
         <div class="panel">
+          <h2>Key moments <span class="mut" style="font-weight:300">- recap, chapters, quotes</span></h2>
+          <div class="row"><button id="makeinsights" class="ghost mini">Extract key moments</button><span id="insightinfo" class="mut"></span></div>
+          <div id="insights"></div>
+        </div>
+
+        <div class="panel">
           <h2>Social posts</h2>
           <div class="row"><button id="makesocials" class="ghost mini">Draft social posts</button><span id="socialinfo" class="mut"></span></div>
           <div id="socials"></div>
@@ -190,6 +217,23 @@ drop.onclick=()=>fileInput.click();
 drop.addEventListener("drop",ev=>{ if(ev.dataTransfer.files[0]) setFile(ev.dataTransfer.files[0]); });
 fileInput.onchange=()=>{ if(fileInput.files[0]) setFile(fileInput.files[0]); };
 function setFile(f){ chosen=f; $("picked").textContent=f.name+" ("+(f.size/1048576).toFixed(1)+" MB)"; $("go").disabled=false; if(!$("title").value) $("title").value=f.name.replace(/\.[^.]+$/,""); }
+
+// --- library ---
+async function loadLibrary(){
+  const projects=await fetch("/api/studio/projects").then(r=>r.json()).catch(()=>[]);
+  const box=$("liblist");
+  if(!projects.length){ $("library").classList.add("hidden"); return; }
+  $("library").classList.remove("hidden");
+  box.innerHTML=projects.map(p=>{
+    const date=(p.created_at||"").slice(0,10);
+    const badge=p.ready?(p.has_trimmed?"trimmed":"ready"):"processing";
+    const extra=[p.clips?`${p.clips} clips`:"",date].filter(Boolean).join(" - ");
+    return `<div class="libitem" data-p="${p.project}"><span class="badge">${badge}</span><div style="flex:1"><div class="lt">${p.title}</div><div class="lm">${extra}</div></div></div>`;
+  }).join("");
+  box.querySelectorAll(".libitem").forEach(el=>el.onclick=()=>{ project=el.dataset.p; $("intake").classList.add("hidden"); $("library").classList.add("hidden"); loadEditor(); });
+}
+$("newrec").onclick=()=>{ $("intake").classList.remove("hidden"); $("results").classList.add("hidden"); };
+loadLibrary();
 
 async function pollTask(id,onp){ for(;;){ const t=await fetch(`/api/tasks/${id}`).then(r=>r.json()); onp(t); if(t.status==="complete")return t; if(t.status==="error")throw new Error(t.error||"Task failed"); await new Promise(r=>setTimeout(r,1200)); } }
 function setProgress(p,m){ $("barfill").style.width=(p||0)+"%"; $("status").textContent=m||""; }
@@ -224,12 +268,22 @@ async function loadEditor(){
 }
 
 function inCut(t){ return CUTS.some(c=>c.enabled && t>=c.start && t<c.end); }
+function isDropped(s,e){ const m=(s+e)/2; return CUTS.some(c=>c.enabled && c.type==="deleted" && m>=c.start && m<c.end); }
+function toggleSegmentCut(seg){
+  // text-edits-video: deleting a line adds an enabled "deleted" cut for its time range
+  const existing=CUTS.find(c=>c.type==="deleted" && Math.abs(c.start-seg.start)<0.05 && Math.abs(c.end-seg.end)<0.05);
+  if(existing){ CUTS=CUTS.filter(c=>c!==existing); }
+  else { CUTS.push({id:"del"+Date.now(), start:seg.start, end:seg.end, type:"deleted", source:"human", enabled:true, text:(seg.text||"").slice(0,60)}); }
+  renderTranscript(); renderCuts(); saveCuts(); toast(existing?"Restored":"Removed from video");
+}
 function renderTranscript(){
   const box=$("transcript"); box.innerHTML="";
   SEG.forEach((s,si)=>{
     const div=document.createElement("div"); div.className="seg"; div.dataset.s=s.start; div.dataset.e=s.end;
+    const dropped=isDropped(s.start,s.end); if(dropped) div.classList.add("dropped");
     const spk=s.speaker?`<span class="spk">${s.speaker}</span>`:"";
-    div.innerHTML=`${spk}<span class="ts" data-t="${s.start}">${fmt(s.start)}</span>`;
+    div.innerHTML=`<span class="del" title="${dropped?'Restore':'Delete from video'}">${dropped?'&#8634;':'&#10005;'}</span>${spk}<span class="ts" data-t="${s.start}">${fmt(s.start)}</span>`;
+    div.querySelector(".del").onclick=(e)=>{ e.stopPropagation(); toggleSegmentCut(s); };
     const words=s.words&&s.words.length?s.words:[{word:s.text,start:s.start,end:s.end}];
     words.forEach((w,wi)=>{
       const sp=document.createElement("span"); sp.className="w"; sp.textContent=w.word+" ";
@@ -347,6 +401,20 @@ $("makesocials").onclick=async()=>{
 };
 function postBlock(label,text){ const w=document.createElement("div"); w.className="post"; w.innerHTML=`<div class="lab">${label}</div><div class="txt">${text}</div>`; const b=document.createElement("button"); b.className="ghost mini"; b.textContent="Copy"; b.onclick=()=>copyText(text,b); w.appendChild(b); return w; }
 function renderSocials(s){ const box=$("socials"); box.innerHTML=""; if(!s)return; if(s.episode){ if(s.episode.farcaster)box.appendChild(postBlock("Farcaster",s.episode.farcaster)); if(s.episode.x)box.appendChild(postBlock("X",s.episode.x)); } (s.clips||[]).forEach(c=>box.appendChild(postBlock("Clip - "+c.clip,c.post))); }
+
+$("makeinsights").onclick=async()=>{
+  $("makeinsights").disabled=true; $("insightinfo").textContent="Reading...";
+  try{ const res=await fetch(`/api/studio/${project}/insights`,{method:"POST"}).then(r=>r.json());
+    const done=await pollTask(res.task_id,t=>{$("insightinfo").textContent=t.message;}); renderInsights(done.result); $("insightinfo").textContent="";
+  }catch(e){ $("insightinfo").textContent="Error: "+e.message; } finally{ $("makeinsights").disabled=false; }
+};
+function renderInsights(ins){
+  const box=$("insights"); box.innerHTML=""; if(!ins) return;
+  if(ins.recap){ const r=document.createElement("div"); r.innerHTML=`<div class="lab" style="font-family:Syne;font-size:11px;color:#6a6a74;text-transform:uppercase">Recap</div><div class="mut" style="color:#c8c8d0;margin:6px 0 14px">${ins.recap.replace(/\n/g,"<br>")}</div>`; box.appendChild(r); }
+  if((ins.chapters||[]).length){ const c=document.createElement("div"); c.innerHTML=`<div class="lab" style="font-family:Syne;font-size:11px;color:#6a6a74;text-transform:uppercase">Chapters</div>`+ins.chapters.map(ch=>`<div class="chapter"><span class="ct" data-t="${tsToS(ch.time)}">${ch.time}</span><span>${ch.title}</span></div>`).join(""); box.appendChild(c); c.querySelectorAll(".ct").forEach(el=>el.onclick=()=>{$("vid").currentTime=+el.dataset.t;}); }
+  if((ins.quotes||[]).length){ const q=document.createElement("div"); q.style.marginTop="12px"; q.innerHTML=`<div class="lab" style="font-family:Syne;font-size:11px;color:#6a6a74;text-transform:uppercase">Key quotes</div>`+ins.quotes.map(qq=>`<div class="quote">"${qq.text}"<div class="qm">${qq.timestamp||""} ${qq.context||""}</div></div>`).join(""); box.appendChild(q); }
+}
+function tsToS(ts){ const p=(ts||"0:00").split(":").map(Number); return p.length===3?p[0]*3600+p[1]*60+p[2]:p[0]*60+(p[1]||0); }
 </script>
 </body>
 </html>

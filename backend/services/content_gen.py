@@ -90,11 +90,6 @@ def generate_recap_and_clips(segments: list, project_name: str = "") -> dict:
         }
     """
     client, model = _get_client()
-    if not client:
-        raise RuntimeError(
-            "No API key found. Set OPENAI_API_KEY or GROQ_API_KEY environment variable."
-        )
-
     transcript_text = _format_transcript(segments)
 
     prompt = f"""You are a content strategist analyzing a video transcript. The project is called "{project_name}".
@@ -130,17 +125,30 @@ IMPORTANT: Use the exact timestamps from the transcript. Return ONLY valid JSON,
 TRANSCRIPT:
 {transcript_text}"""
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.7,
-        max_tokens=4096,
-    )
-
-    raw = response.choices[0].message.content.strip()
+    if client:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=4096,
+        )
+        raw = (response.choices[0].message.content or "").strip()
+    else:
+        # Hermes pattern: no client, use the claude CLI (zero marginal cost).
+        from . import hermes
+        raw = hermes.run_prompt(prompt) or ""
+        model = hermes.backend_name()
+        if not raw:
+            raise RuntimeError(
+                "No LLM available. Set OPENAI_API_KEY / GROQ_API_KEY, run Ollama, or install the claude CLI."
+            )
 
     # Strip <think> blocks from reasoning models like qwen3
     raw = re.sub(r'<think>[\s\S]*?</think>\s*', '', raw)
+    # pull out the JSON object if the model added prose around it
+    _m = re.search(r'\{[\s\S]*\}', raw)
+    if _m:
+        raw = _m.group(0)
 
     # Strip markdown fences if present
     if raw.startswith("```"):
