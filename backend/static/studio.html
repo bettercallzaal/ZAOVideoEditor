@@ -444,6 +444,16 @@ function renderInsights(ins){
   if(ins.recap){ const r=document.createElement("div"); r.innerHTML=`<div class="lab" style="font-family:Syne;font-size:11px;color:#6a6a74;text-transform:uppercase">Recap</div><div class="mut" style="color:#c8c8d0;margin:6px 0 14px">${ins.recap.replace(/\n/g,"<br>")}</div>`; box.appendChild(r); }
   if((ins.chapters||[]).length){ const c=document.createElement("div"); c.innerHTML=`<div class="lab" style="font-family:Syne;font-size:11px;color:#6a6a74;text-transform:uppercase">Chapters</div>`+ins.chapters.map(ch=>`<div class="chapter"><span class="ct" data-t="${tsToS(ch.time)}">${ch.time}</span><span>${ch.title}</span></div>`).join(""); box.appendChild(c); c.querySelectorAll(".ct").forEach(el=>el.onclick=()=>{$("vid").currentTime=+el.dataset.t;}); }
   if((ins.quotes||[]).length){ const q=document.createElement("div"); q.style.marginTop="12px"; q.innerHTML=`<div class="lab" style="font-family:Syne;font-size:11px;color:#6a6a74;text-transform:uppercase">Key quotes</div>`+ins.quotes.map(qq=>`<div class="quote">"${qq.text}"<div class="qm">${qq.timestamp||""} ${qq.context||""}</div></div>`).join(""); box.appendChild(q); }
+  if(BONFIRE_OK){ const bf=document.createElement("div"); bf.className="row mt"; const b=document.createElement("button"); b.className="ghost mini"; b.textContent="Save recap to ZAO memory (Bonfire)"; b.onclick=()=>saveBonfire(b); bf.appendChild(b); const n=document.createElement("span"); n.className="mut"; n.style.marginLeft="8px"; n.textContent="opt-in - posts this recap to the knowledge graph"; bf.appendChild(n); box.appendChild(bf); }
+}
+let BONFIRE_OK=false;
+fetch("/api/studio/bonfire-status").then(r=>r.json()).then(d=>{BONFIRE_OK=d.configured;}).catch(()=>{});
+async function saveBonfire(b){
+  b.disabled=true; const o=b.textContent; b.textContent="Saving...";
+  try{ const r=await fetch(`/api/studio/${project}/bonfire`,{method:"POST"}).then(x=>x.json());
+    if(r.detail) throw new Error(r.detail);
+    b.textContent="Saved to memory"; toast("Posted to Bonfire");
+  }catch(e){ b.textContent="Failed"; toast(e.message); setTimeout(()=>{b.textContent=o;b.disabled=false;},2200); }
 }
 function tsToS(ts){ const p=(ts||"0:00").split(":").map(Number); return p.length===3?p[0]*3600+p[1]*60+p[2]:p[0]*60+(p[1]||0); }
 </script>
