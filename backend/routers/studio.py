@@ -58,12 +58,13 @@ def _make_project(name: str, title: str, source: str) -> Path:
     return project_dir
 
 
-def _do_process(task_id: str, project_dir: Path, media: str, title: str, speakers: bool):
+def _do_process(task_id: str, project_dir: Path, media: str, title: str,
+                speakers: bool, quality: str = "fast"):
     if speakers:
         _annotate_speakers(task_id, project_dir, media)
     result = rp.process_recording(
-        media, title=title, quality="standard", out_dir=str(project_dir / "transcripts"),
-        readable_llm=True,
+        media, title=title, quality=quality, engine="auto",
+        out_dir=str(project_dir / "transcripts"), readable_llm=True,
         on_progress=lambda pct, msg: tm.update_task(task_id, progress=pct, message=msg),
     )
     return {
@@ -89,7 +90,8 @@ def _annotate_speakers(task_id: str, project_dir: Path, media: str):
 
 
 @router.post("/process")
-async def process(file: UploadFile = File(...), title: str = Form(""), speakers: bool = Form(False)):
+async def process(file: UploadFile = File(...), title: str = Form(""),
+                  speakers: bool = Form(False), quality: str = Form("fast")):
     """Create a project from an uploaded recording and run the pipeline."""
     orig = file.filename or "recording"
     ext = Path(orig).suffix.lower()
@@ -106,11 +108,12 @@ async def process(file: UploadFile = File(...), title: str = Form(""), speakers:
             f.write(chunk)
 
     task_id = tm.create_task(name, "studio_process")
-    tm.run_in_background(task_id, _do_process, project_dir, str(dest), disp, speakers)
+    tm.run_in_background(task_id, _do_process, project_dir, str(dest), disp, speakers, quality)
     return {"project": name, "task_id": task_id}
 
 
-def _do_ingest_process(task_id: str, project_dir: Path, url: str, title: str, speakers: bool):
+def _do_ingest_process(task_id: str, project_dir: Path, url: str, title: str,
+                       speakers: bool, quality: str = "fast"):
     from ..services import ingest_service
     tm.update_task(task_id, progress=2, message="Fetching from link...")
     ingest_service.download_to_project(
@@ -118,11 +121,12 @@ def _do_ingest_process(task_id: str, project_dir: Path, url: str, title: str, sp
         on_progress=lambda pct, msg: tm.update_task(task_id, progress=min(int(pct * 0.4), 40), message=msg),
     )
     media = _find_input(project_dir)
-    return _do_process(task_id, project_dir, str(media), title, speakers)
+    return _do_process(task_id, project_dir, str(media), title, speakers, quality)
 
 
 @router.post("/ingest")
-async def ingest_link(url: str = Form(...), title: str = Form(""), speakers: bool = Form(False)):
+async def ingest_link(url: str = Form(...), title: str = Form(""),
+                      speakers: bool = Form(False), quality: str = Form("fast")):
     """Pull a recording from a URL (YouTube / Twitch / Restream / HLS) and process it."""
     from ..services import ingest_service
     if not ingest_service.yt_dlp_available():
@@ -134,7 +138,7 @@ async def ingest_link(url: str = Form(...), title: str = Form(""), speakers: boo
     name = _slug(disp)
     project_dir = _make_project(name, disp, "studio-link")
     task_id = tm.create_task(name, "studio_process")
-    tm.run_in_background(task_id, _do_ingest_process, project_dir, url, disp, speakers)
+    tm.run_in_background(task_id, _do_ingest_process, project_dir, url, disp, speakers, quality)
     return {"project": name, "task_id": task_id}
 
 
