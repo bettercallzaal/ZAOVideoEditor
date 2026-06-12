@@ -92,15 +92,29 @@ def _transcribe(audio_path: str, quality: str, engine: str, progress) -> dict:
     )
 
 
+def _detect_speakers(audio_path: str, segments: list, progress) -> list:
+    """Best-effort diarization -> speaker labels on segments. Never blocks."""
+    try:
+        from .diarization import diarize_audio, assign_speakers_to_segments
+        progress(78, "Detecting speakers...")
+        turns = diarize_audio(audio_path)
+        if turns:
+            return assign_speakers_to_segments(segments, turns)
+    except Exception as e:
+        print(f"Speaker detection skipped: {e}")
+    return segments
+
+
 def process_recording(media_path: str, title: str = "", quality: str = "fast",
                       engine: str = "auto", out_dir: Optional[str] = None,
                       readable_llm: bool = True, plan_cuts: bool = True,
-                      suggest_falsestarts: bool = False,
+                      suggest_falsestarts: bool = False, detect_speakers: bool = False,
                       on_progress: Optional[Callable[[int, str], None]] = None) -> dict:
     """Run the headless transcript pipeline on a media file.
 
     quality: fast (base model, default - viable on CPU) | balanced (small) | best (large-v3).
     engine:  auto (Groq if GROQ_API_KEY set, else local) | groq | local.
+    detect_speakers: run diarization and label segments with speakers.
 
     Returns a dict with the corrected segments, the readable markdown, review
     flags, glossary changes, an edit sheet (cut plan), and (if out_dir given) the
@@ -119,11 +133,13 @@ def process_recording(media_path: str, title: str = "", quality: str = "fast",
 
     try:
         data = _transcribe(str(audio_path), quality, engine, progress)
+        segments = data.get("segments", [])
+        if detect_speakers:
+            segments = _detect_speakers(str(audio_path), segments, progress)
     finally:
         if tmp and tmp.exists():
             tmp.unlink()
 
-    segments = data.get("segments", [])
     duration = data.get("duration") or (segments[-1].get("end", 0.0) if segments else 0.0)
 
     progress(80, "Applying brand glossary...")

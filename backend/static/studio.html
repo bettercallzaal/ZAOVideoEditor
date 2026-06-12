@@ -4,305 +4,349 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>ZAO Recordings Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
-  :root { --bg:#070709; --panel:#121218; --orange:#ff6b35; --cyan:#00e5ff; --line:#26262e; }
+  :root { --bg:#070709; --panel:#101016; --panel2:#16161e; --line:#26262e; --orange:#ff6b35; --cyan:#00e5ff; --txt:#e8e8ea; --mut:#8a8a94; }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:#e8e8ea; font:15px/1.5 ui-sans-serif,system-ui,sans-serif; }
-  header { padding:20px 24px; border-bottom:1px solid var(--line); }
-  h1 { margin:0; color:var(--orange); font-size:20px; }
-  header p { margin:4px 0 0; color:#8a8a94; font-size:13px; }
-  main { max-width:920px; margin:0 auto; padding:24px; }
-  .drop { border:2px dashed var(--line); border-radius:12px; padding:36px; text-align:center; cursor:pointer; transition:.15s; }
-  .drop.over { border-color:var(--orange); background:rgba(255,107,53,.06); }
-  .drop strong { color:#e8e8ea; }
-  .drop small { color:#8a8a94; }
-  input[type=text],input[type=url] { width:100%; background:#0d0d12; border:1px solid var(--line); border-radius:8px; padding:10px 12px; color:#e8e8ea; }
-  .or { text-align:center; color:#6a6a74; font-size:12px; margin:14px 0; letter-spacing:.08em; }
-  button { background:var(--orange); color:#0a0a0a; border:0; border-radius:8px; padding:10px 16px; font-weight:600; cursor:pointer; }
+  body { margin:0; background:var(--bg); color:var(--txt); font-family:Outfit,system-ui,sans-serif; font-weight:300; }
+  h1,h2,h3 { font-family:Syne,sans-serif; }
+  header { padding:18px 26px; border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:16px; }
+  h1 { margin:0; color:var(--orange); font-size:22px; font-weight:800; letter-spacing:-.02em; }
+  header p { margin:0; color:var(--mut); font-size:13px; }
+  main { max-width:1200px; margin:0 auto; padding:24px; }
+  .num { font-family:'JetBrains Mono',monospace; }
+  .drop { border:2px dashed var(--line); border-radius:14px; padding:34px; text-align:center; cursor:pointer; transition:.15s; }
+  .drop.over { border-color:var(--orange); background:rgba(255,107,53,.07); }
+  .drop strong { color:var(--txt); font-weight:600; }
+  .drop small { color:var(--mut); }
+  input[type=text],input[type=url],select { width:100%; background:#0c0c12; border:1px solid var(--line); border-radius:9px; padding:11px 13px; color:var(--txt); font-family:inherit; font-size:14px; }
+  select { width:auto; }
+  .or { text-align:center; color:#5a5a64; font-size:11px; letter-spacing:.14em; margin:14px 0; }
+  button { background:var(--orange); color:#0a0a0a; border:0; border-radius:9px; padding:11px 18px; font-family:Outfit; font-weight:600; cursor:pointer; transition:.12s; }
+  button:hover { filter:brightness(1.08); }
   button:disabled { opacity:.4; cursor:default; }
-  button.ghost { background:transparent; color:#cfcfd6; border:1px solid var(--line); }
-  button.mini { padding:4px 10px; font-size:12px; }
-  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:14px; }
-  label.chk { display:flex; gap:6px; align-items:center; font-size:13px; color:#cfcfd6; cursor:pointer; }
-  .bar { height:8px; background:#1d1d24; border-radius:99px; overflow:hidden; margin-top:14px; }
-  .bar > div { height:100%; background:var(--orange); width:0; transition:width .3s; }
-  .muted { color:#8a8a94; font-size:13px; }
-  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px; margin-top:18px; }
-  .panel h2 { margin:0 0 10px; font-size:15px; color:var(--cyan); }
-  pre { white-space:pre-wrap; word-wrap:break-word; background:#0d0d12; border:1px solid var(--line); border-radius:8px; padding:14px; max-height:340px; overflow:auto; font:13px/1.6 ui-monospace,monospace; }
-  .flag { font-size:13px; padding:6px 0; border-bottom:1px solid var(--line); }
-  .flag b { color:var(--orange); }
-  a.dl { color:var(--cyan); text-decoration:none; font-size:13px; margin-right:16px; }
+  button.ghost { background:transparent; color:#d2d2d8; border:1px solid var(--line); }
+  button.ghost:hover { border-color:var(--orange); color:#fff; }
+  button.mini { padding:6px 12px; font-size:13px; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .mt { margin-top:14px; }
+  label.chk { display:flex; gap:7px; align-items:center; font-size:13px; color:#cfcfd6; cursor:pointer; }
+  .bar { height:7px; background:#1d1d24; border-radius:99px; overflow:hidden; margin-top:14px; }
+  .bar > div { height:100%; background:linear-gradient(90deg,var(--orange),#ff9a6b); width:0; transition:width .3s; }
+  .mut { color:var(--mut); font-size:13px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; margin-top:18px; }
+  .panel > h2 { margin:0 0 12px; font-size:15px; color:var(--cyan); font-weight:700; letter-spacing:.01em; }
+  a.dl { color:var(--cyan); text-decoration:none; font-size:13px; margin-right:18px; }
   a.dl:hover { text-decoration:underline; }
   .hidden { display:none; }
+  /* editor */
+  .editor { display:grid; grid-template-columns: 420px 1fr; gap:18px; align-items:start; }
+  @media (max-width:900px){ .editor { grid-template-columns:1fr; } }
+  .stick { position:sticky; top:18px; }
+  video { width:100%; border-radius:12px; background:#000; }
+  .ctl { margin-top:12px; }
+  .seg { padding:8px 10px; border-radius:9px; margin-bottom:6px; transition:background .1s; line-height:1.7; }
+  .seg.active { background:rgba(0,229,255,.07); }
+  .seg .spk { font-family:Syne; font-weight:700; font-size:12px; color:var(--cyan); margin-right:8px; text-transform:uppercase; letter-spacing:.04em; }
+  .seg .ts { font-family:'JetBrains Mono',monospace; font-size:11px; color:#5a5a64; margin-right:8px; cursor:pointer; }
+  .w { cursor:pointer; border-radius:3px; padding:0 1px; }
+  .w:hover { background:rgba(255,107,53,.18); }
+  .w.cut { color:#54545e; text-decoration:line-through; }
+  .w.here { background:rgba(255,107,53,.32); }
+  .transcript { max-height:62vh; overflow:auto; padding-right:6px; }
+  .cutlist { max-height:240px; overflow:auto; margin-top:10px; }
+  .cutrow { display:flex; gap:8px; align-items:center; font-size:13px; padding:5px 0; border-bottom:1px solid var(--line); }
+  .tag { font-family:Syne; font-size:10px; padding:2px 7px; border-radius:99px; background:#1f1f28; color:var(--mut); text-transform:uppercase; letter-spacing:.05em; }
+  .flag { font-size:13px; padding:7px 0; border-bottom:1px solid var(--line); }
+  .flag b { color:var(--orange); }
   .clip { display:flex; gap:14px; padding:12px 0; border-bottom:1px solid var(--line); }
-  .clip video { width:160px; border-radius:8px; background:#000; }
-  .clip .meta { flex:1; }
-  .clip .meta .t { font-weight:600; }
-  .clip .meta .c { color:#b9b9c2; font-size:13px; margin:4px 0; }
-  .clip .meta .h { color:var(--cyan); font-size:12px; }
-  .post { border:1px solid var(--line); border-radius:8px; padding:12px; margin-top:10px; }
-  .post .lab { font-size:11px; color:#7a7a84; text-transform:uppercase; letter-spacing:.06em; }
-  .post .txt { margin:4px 0 8px; font-size:14px; }
+  .clip video { width:150px; }
+  .clip .t { font-weight:600; }
+  .clip .c { color:#b9b9c2; font-size:13px; margin:4px 0; }
+  .clip .h { color:var(--cyan); font-size:12px; }
+  .post { border:1px solid var(--line); border-radius:10px; padding:12px; margin-top:10px; }
+  .post .lab { font-size:11px; color:#6a6a74; text-transform:uppercase; letter-spacing:.06em; font-family:Syne; }
+  .post .txt { margin:5px 0 9px; font-size:14px; }
+  .spkrow { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  .spkrow input { max-width:220px; }
+  .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--orange); color:#0a0a0a; padding:10px 18px; border-radius:99px; font-weight:600; font-size:13px; opacity:0; transition:.2s; pointer-events:none; }
+  .toast.show { opacity:1; }
 </style>
 </head>
 <body>
 <header>
   <h1>ZAO Recordings Studio</h1>
-  <p>Drop a recording or paste a link. Get a clean transcript, a trimmed video, postable clips, and drafted social posts. No setup.</p>
+  <p>Recording or link in. Clean transcript, trimmed video, clips, and social posts out.</p>
 </header>
 <main>
-  <div id="drop" class="drop">
-    <strong>Drop a recording here</strong> or click to choose<br/>
-    <small>mp4, mov, mkv, webm, or an audio file</small>
-    <input id="file" type="file" accept="video/*,audio/*" class="hidden" />
+  <div id="intake">
+    <div id="drop" class="drop">
+      <strong>Drop a recording here</strong> or click to choose<br/>
+      <small>mp4, mov, mkv, webm, or an audio file</small>
+      <input id="file" type="file" accept="video/*,audio/*" class="hidden" />
+    </div>
+    <div class="or">OR PASTE A LINK</div>
+    <input id="url" type="url" placeholder="YouTube / Twitch / Restream / .m3u8 / .mp4 URL" />
+    <input id="title" type="text" placeholder="Title (optional)" class="mt" />
+    <div class="row mt">
+      <button id="go" disabled>Process recording</button>
+      <button id="golink" class="ghost">Process from link</button>
+      <label class="chk">Speed:
+        <select id="quality">
+          <option value="fast" selected>Fast (recommended)</option>
+          <option value="balanced">Balanced</option>
+          <option value="best">Best (slow on CPU)</option>
+        </select>
+      </label>
+      <label class="chk"><input id="speakers" type="checkbox" /> Detect speakers</label>
+      <span id="picked" class="mut"></span>
+    </div>
+    <p class="mut mt">Tip: set a <strong>GROQ_API_KEY</strong> (free at console.groq.com) before launch for near-instant transcription of long recordings.</p>
   </div>
-  <div class="or">- OR PASTE A LINK -</div>
-  <input id="url" type="url" placeholder="YouTube / Twitch / Restream / .m3u8 / .mp4 URL" />
-  <input id="title" type="text" placeholder="Title (optional - defaults to the filename)" style="margin-top:10px" />
-  <div class="row">
-    <button id="go" disabled>Process recording</button>
-    <button id="golink" class="ghost">Process from link</button>
-    <label class="chk">Speed:
-      <select id="quality" style="background:#0d0d12;border:1px solid var(--line);border-radius:6px;color:#e8e8ea;padding:6px 8px;">
-        <option value="fast" selected>Fast (base model - recommended)</option>
-        <option value="balanced">Balanced (small model)</option>
-        <option value="best">Best (large-v3 - slow on CPU)</option>
-      </select>
-    </label>
-    <label class="chk"><input id="speakers" type="checkbox" /> Detect speakers</label>
-    <span id="picked" class="muted"></span>
-  </div>
-  <p class="muted" style="margin-top:8px">Tip: transcription runs on your CPU. For long recordings, set a <strong>GROQ_API_KEY</strong> (free at console.groq.com) before launch and it auto-uses Groq - a 17-minute file finishes in seconds instead of minutes.</p>
 
   <div id="progress" class="panel hidden">
     <h2>Working</h2>
     <div class="bar"><div id="barfill"></div></div>
-    <p id="status" class="muted">Starting...</p>
+    <p id="status" class="mut">Starting...</p>
   </div>
 
   <div id="results" class="hidden">
-    <div class="panel">
-      <h2>Outputs</h2>
-      <div class="row" id="downloads"></div>
-      <div class="row">
-        <button id="render" class="ghost mini">Make trimmed video</button>
-        <span id="cutinfo" class="muted"></span>
+    <div class="editor">
+      <div class="stick">
+        <video id="vid" controls></video>
+        <div class="ctl">
+          <div class="row">
+            <button id="render" class="ghost mini">Render trimmed video</button>
+            <span id="cutinfo" class="mut"></span>
+          </div>
+          <div class="row mt" id="downloads"></div>
+        </div>
+        <div class="panel" style="margin-top:14px">
+          <h2>Cuts</h2>
+          <div class="row">
+            <button class="ghost mini" data-batch="all">Accept all</button>
+            <button class="ghost mini" data-batch="none">Reject all</button>
+            <button class="ghost mini" data-batch="filler">um/uh only</button>
+            <button class="ghost mini" data-batch="fillergap">fillers + gaps</button>
+          </div>
+          <div id="cutlist" class="cutlist"></div>
+        </div>
+        <div class="panel" id="spkpanel" style="margin-top:14px">
+          <h2>Speakers</h2>
+          <div id="speakers-box"></div>
+          <button id="applyspk" class="ghost mini hidden">Apply names</button>
+          <p class="mut" id="spknote">Re-process with "Detect speakers" on to label who is talking.</p>
+        </div>
       </div>
-    </div>
 
-    <div class="panel">
-      <h2>Clips for distribution</h2>
-      <div class="row">
-        <label class="chk"><input type="checkbox" class="asp" value="9:16" checked /> 9:16</label>
-        <label class="chk"><input type="checkbox" class="asp" value="1:1" /> 1:1</label>
-        <label class="chk"><input type="checkbox" class="asp" value="16:9" /> 16:9</label>
-        <button id="makeclips" class="ghost mini">Make clips</button>
-        <span id="clipinfo" class="muted"></span>
+      <div>
+        <div class="panel" style="margin-top:0">
+          <h2>Transcript <span class="mut" style="font-weight:300">- click a word to jump, double-click to fix</span></h2>
+          <div id="transcript" class="transcript"></div>
+        </div>
+
+        <div class="panel">
+          <h2>Clips for distribution</h2>
+          <div class="row">
+            <label class="chk"><input type="checkbox" class="asp" value="9:16" checked /> 9:16</label>
+            <label class="chk"><input type="checkbox" class="asp" value="1:1" /> 1:1</label>
+            <label class="chk"><input type="checkbox" class="asp" value="16:9" /> 16:9</label>
+            <button id="makeclips" class="ghost mini">Make clips</button>
+            <span id="clipinfo" class="mut"></span>
+          </div>
+          <div id="clips"></div>
+        </div>
+
+        <div class="panel">
+          <h2>Social posts</h2>
+          <div class="row"><button id="makesocials" class="ghost mini">Draft social posts</button><span id="socialinfo" class="mut"></span></div>
+          <div id="socials"></div>
+        </div>
+
+        <div class="panel" id="flagspanel">
+          <h2>Review these by hand</h2>
+          <div id="flags"></div>
+        </div>
       </div>
-      <div id="clips"></div>
-    </div>
-
-    <div class="panel">
-      <h2>Social posts</h2>
-      <div class="row">
-        <button id="makesocials" class="ghost mini">Draft social posts</button>
-        <span id="socialinfo" class="muted"></span>
-      </div>
-      <div id="socials"></div>
-    </div>
-
-    <div class="panel" id="flagspanel">
-      <h2>Review these by hand</h2>
-      <div id="flags"></div>
-    </div>
-    <div class="panel">
-      <h2>Readable transcript</h2>
-      <pre id="readable"></pre>
     </div>
   </div>
 </main>
+<div id="toast" class="toast"></div>
 
 <script>
 const $ = (id) => document.getElementById(id);
-let chosen = null, project = null;
+let chosen=null, project=null, SEG=[], CUTS=[], DUR=0;
 
-const drop = $("drop"), fileInput = $("file");
-drop.onclick = () => fileInput.click();
-["dragover","dragenter"].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add("over"); }));
-["dragleave","drop"].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove("over"); }));
-drop.addEventListener("drop", ev => { if (ev.dataTransfer.files[0]) setFile(ev.dataTransfer.files[0]); });
-fileInput.onchange = () => { if (fileInput.files[0]) setFile(fileInput.files[0]); };
+function toast(m){ const t=$("toast"); t.textContent=m; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),1400); }
+function fmt(t){ const m=Math.floor(t/60), s=Math.floor(t%60); return m+":"+String(s).padStart(2,"0"); }
+function copyText(t,btn){ navigator.clipboard.writeText(t).then(()=>{ const o=btn.textContent; btn.textContent="Copied"; setTimeout(()=>btn.textContent=o,1200); }); }
 
-function setFile(f) {
-  chosen = f;
-  $("picked").textContent = f.name + " (" + (f.size/1048576).toFixed(1) + " MB)";
-  $("go").disabled = false;
-  if (!$("title").value) $("title").value = f.name.replace(/\.[^.]+$/, "");
+const drop=$("drop"), fileInput=$("file");
+drop.onclick=()=>fileInput.click();
+["dragover","dragenter"].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add("over");}));
+["dragleave","drop"].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove("over");}));
+drop.addEventListener("drop",ev=>{ if(ev.dataTransfer.files[0]) setFile(ev.dataTransfer.files[0]); });
+fileInput.onchange=()=>{ if(fileInput.files[0]) setFile(fileInput.files[0]); };
+function setFile(f){ chosen=f; $("picked").textContent=f.name+" ("+(f.size/1048576).toFixed(1)+" MB)"; $("go").disabled=false; if(!$("title").value) $("title").value=f.name.replace(/\.[^.]+$/,""); }
+
+async function pollTask(id,onp){ for(;;){ const t=await fetch(`/api/tasks/${id}`).then(r=>r.json()); onp(t); if(t.status==="complete")return t; if(t.status==="error")throw new Error(t.error||"Task failed"); await new Promise(r=>setTimeout(r,1200)); } }
+function setProgress(p,m){ $("barfill").style.width=(p||0)+"%"; $("status").textContent=m||""; }
+
+async function runProcess(endpoint,body,isForm){
+  $("go").disabled=true; $("golink").disabled=true;
+  $("results").classList.add("hidden"); $("progress").classList.remove("hidden"); setProgress(2,"Starting...");
+  try{
+    const opts=isForm?{method:"POST",body}:{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body};
+    const res=await fetch(endpoint,opts).then(r=>r.json());
+    if(res.detail) throw new Error(res.detail);
+    project=res.project;
+    await pollTask(res.task_id,t=>setProgress(t.progress,t.message));
+    await loadEditor();
+  }catch(e){ setProgress(100,"Error: "+e.message); }
+  finally{ $("go").disabled=false; $("golink").disabled=false; }
+}
+$("go").onclick=()=>{ if(!chosen)return; const fd=new FormData(); fd.append("file",chosen); fd.append("title",$("title").value); fd.append("speakers",$("speakers").checked); fd.append("quality",$("quality").value); runProcess("/api/studio/process",fd,true); };
+$("golink").onclick=()=>{ const url=$("url").value.trim(); if(!url){$("picked").textContent="Paste a link first";return;} runProcess("/api/studio/ingest",new URLSearchParams({url,title:$("title").value,speakers:$("speakers").checked,quality:$("quality").value}),false); };
+
+async function loadEditor(){
+  $("progress").classList.add("hidden"); $("results").classList.remove("hidden");
+  const seg=await fetch(`/api/studio/${project}/segments`).then(r=>r.json());
+  const res=await fetch(`/api/studio/${project}/result`).then(r=>r.json());
+  SEG=seg.segments||[]; CUTS=(res.edit_sheet&&res.edit_sheet.cuts)||[]; DUR=res.edit_sheet.duration||0;
+  $("vid").src=`/api/studio/${project}/video`;
+  $("downloads").innerHTML=`<a class="dl" href="/api/studio/${project}/download/readable">Readable transcript</a>
+    <a class="dl" href="/api/studio/${project}/download/cut">Timestamped transcript</a>
+    <a class="dl" href="/api/studio/${project}/download/editsheet">Edit sheet</a>`;
+  if(res.has_trimmed) addTrimmedLink();
+  renderTranscript(); renderCuts(); renderSpeakers(seg.speakers); renderFlags(res.review_flags); loadClips();
 }
 
-async function pollTask(taskId, onProgress) {
-  for (;;) {
-    const t = await fetch(`/api/tasks/${taskId}`).then(r => r.json());
-    onProgress(t);
-    if (t.status === "complete") return t;
-    if (t.status === "error") throw new Error(t.error || "Task failed");
-    await new Promise(r => setTimeout(r, 1200));
-  }
-}
-function setProgress(pct, msg) { $("barfill").style.width = (pct||0) + "%"; $("status").textContent = msg || ""; }
-function copyText(t, btn) { navigator.clipboard.writeText(t).then(() => { const o = btn.textContent; btn.textContent = "Copied"; setTimeout(() => btn.textContent = o, 1200); }); }
-
-async function runProcess(endpoint, body, isForm) {
-  $("go").disabled = true; $("golink").disabled = true;
-  $("results").classList.add("hidden");
-  $("progress").classList.remove("hidden");
-  setProgress(2, "Starting...");
-  try {
-    const opts = isForm ? { method: "POST", body } : { method: "POST", headers: {"Content-Type":"application/x-www-form-urlencoded"}, body };
-    const res = await fetch(endpoint, opts).then(r => r.json());
-    if (res.detail) throw new Error(res.detail);
-    project = res.project;
-    await pollTask(res.task_id, t => setProgress(t.progress, t.message));
-    await showResults();
-  } catch (e) {
-    setProgress(100, "Error: " + e.message);
-  } finally {
-    $("go").disabled = false; $("golink").disabled = false;
-  }
-}
-
-$("go").onclick = () => {
-  if (!chosen) return;
-  const fd = new FormData();
-  fd.append("file", chosen);
-  fd.append("title", $("title").value);
-  fd.append("speakers", $("speakers").checked);
-  fd.append("quality", $("quality").value);
-  runProcess("/api/studio/process", fd, true);
-};
-
-$("golink").onclick = () => {
-  const url = $("url").value.trim();
-  if (!url) { $("picked").textContent = "Paste a link first"; return; }
-  const body = new URLSearchParams({ url, title: $("title").value, speakers: $("speakers").checked, quality: $("quality").value });
-  runProcess("/api/studio/ingest", body, false);
-};
-
-async function showResults() {
-  const r = await fetch(`/api/studio/${project}/result`).then(x => x.json());
-  $("progress").classList.add("hidden");
-  $("results").classList.remove("hidden");
-  $("readable").textContent = r.readable || "(empty)";
-  $("downloads").innerHTML = `
-    <a class="dl" href="/api/studio/${project}/download/readable">Download readable transcript</a>
-    <a class="dl" href="/api/studio/${project}/download/cut">Download timestamped transcript</a>
-    <a class="dl" href="/api/studio/${project}/download/editsheet">Download edit sheet</a>`;
-  const enabled = (r.edit_sheet.cuts || []).filter(c => c.enabled).length;
-  $("cutinfo").textContent = `${(r.edit_sheet.cuts||[]).length} cuts planned, ${enabled} on by default`;
-
-  const fp = $("flags");
-  if (!r.review_flags.length) { $("flagspanel").classList.add("hidden"); }
-  else {
-    $("flagspanel").classList.remove("hidden");
-    fp.innerHTML = r.review_flags.map(f =>
-      `<div class="flag"><b>${f.term}</b>${f.suggestion ? " &rarr; " + f.suggestion : ""} <span class="muted">${f.note||""}</span></div>`).join("");
-  }
-  if (r.has_trimmed) addTrimmedLink();
-  loadClips();
-}
-
-function addTrimmedLink() {
-  if (document.getElementById("trimdl")) return;
-  const a = document.createElement("a");
-  a.id = "trimdl"; a.className = "dl"; a.href = `/api/studio/${project}/download/trimmed`;
-  a.textContent = "Download trimmed video";
-  $("downloads").appendChild(a);
-}
-
-$("render").onclick = async () => {
-  $("render").disabled = true; $("cutinfo").textContent = "Rendering...";
-  try {
-    const res = await fetch(`/api/studio/${project}/render`, { method: "POST" }).then(r => r.json());
-    await pollTask(res.task_id, t => { $("cutinfo").textContent = t.message; });
-    $("cutinfo").textContent = "Trimmed video ready"; addTrimmedLink();
-  } catch (e) { $("cutinfo").textContent = "Error: " + e.message; }
-  finally { $("render").disabled = false; }
-};
-
-$("makeclips").onclick = async () => {
-  const aspects = [...document.querySelectorAll(".asp:checked")].map(c => c.value).join(",") || "9:16";
-  $("makeclips").disabled = true; $("clipinfo").textContent = "Rendering clips...";
-  try {
-    const res = await fetch(`/api/studio/${project}/clips`, {
-      method: "POST", headers: {"Content-Type":"application/x-www-form-urlencoded"},
-      body: new URLSearchParams({ aspects }),
-    }).then(r => r.json());
-    await pollTask(res.task_id, t => { $("clipinfo").textContent = t.message; });
-    await loadClips();
-    $("clipinfo").textContent = "Clips ready";
-  } catch (e) { $("clipinfo").textContent = "Error: " + e.message; }
-  finally { $("makeclips").disabled = false; }
-};
-
-async function loadClips() {
-  const clips = await fetch(`/api/studio/${project}/clips`).then(r => r.json()).catch(() => []);
-  const box = $("clips");
-  if (!clips.length) { box.innerHTML = ""; return; }
-  box.innerHTML = clips.map(c => {
-    const copy = c.copy || {};
-    const tags = (copy.hashtags || []).join(" ");
-    const all = [copy.title, copy.caption, tags].filter(Boolean).join("\n");
-    return `<div class="clip">
-      <video src="/api/studio/${project}/clip/${encodeURIComponent(c.filename)}" controls muted></video>
-      <div class="meta">
-        <div class="t">${copy.title || c.base}</div>
-        <div class="c">${copy.caption || ""}</div>
-        <div class="h">${tags}</div>
-        <div class="row">
-          <a class="dl" href="/api/studio/${project}/clip/${encodeURIComponent(c.filename)}" download>Download ${c.filename}</a>
-          <button class="ghost mini copybtn">Copy caption</button>
-        </div>
-      </div></div>`;
-  }).join("");
-  [...box.querySelectorAll(".copybtn")].forEach((btn, i) => {
-    const c = clips[i].copy || {};
-    const all = [c.title, c.caption, (c.hashtags||[]).join(" ")].filter(Boolean).join("\n");
-    btn.onclick = () => copyText(all, btn);
+function inCut(t){ return CUTS.some(c=>c.enabled && t>=c.start && t<c.end); }
+function renderTranscript(){
+  const box=$("transcript"); box.innerHTML="";
+  SEG.forEach((s,si)=>{
+    const div=document.createElement("div"); div.className="seg"; div.dataset.s=s.start; div.dataset.e=s.end;
+    const spk=s.speaker?`<span class="spk">${s.speaker}</span>`:"";
+    div.innerHTML=`${spk}<span class="ts" data-t="${s.start}">${fmt(s.start)}</span>`;
+    const words=s.words&&s.words.length?s.words:[{word:s.text,start:s.start,end:s.end}];
+    words.forEach((w,wi)=>{
+      const sp=document.createElement("span"); sp.className="w"; sp.textContent=w.word+" ";
+      sp.dataset.t=w.start; sp.dataset.mid=(w.start+w.end)/2;
+      if(inCut((w.start+w.end)/2)) sp.classList.add("cut");
+      sp.onclick=()=>{ $("vid").currentTime=w.start; };
+      sp.ondblclick=(e)=>{ e.stopPropagation(); editWord(si,wi,sp); };
+      div.appendChild(sp);
+    });
+    box.appendChild(div);
   });
+  box.querySelectorAll(".ts").forEach(t=>t.onclick=()=>{ $("vid").currentTime=+t.dataset.t; });
 }
 
-$("makesocials").onclick = async () => {
-  $("makesocials").disabled = true; $("socialinfo").textContent = "Drafting...";
-  try {
-    const res = await fetch(`/api/studio/${project}/socials`, { method: "POST" }).then(r => r.json());
-    const done = await pollTask(res.task_id, t => { $("socialinfo").textContent = t.message; });
-    renderSocials(done.result);
-    $("socialinfo").textContent = "";
-  } catch (e) { $("socialinfo").textContent = "Error: " + e.message; }
-  finally { $("makesocials").disabled = false; }
+function editWord(si,wi,sp){
+  const seg=SEG[si]; const words=seg.words&&seg.words.length?seg.words:null;
+  const cur=words?words[wi].word:seg.text;
+  const nv=prompt("Fix this:", cur.trim());
+  if(nv===null||nv.trim()===cur.trim()) return;
+  if(words){ words[wi].word=nv.trim(); seg.text=words.map(w=>w.word).join(" "); }
+  else { seg.text=nv.trim(); }
+  sp.textContent=nv.trim()+" ";
+  saveTranscript();
+  if(confirm(`Teach the glossary: always change "${cur.trim()}" to "${nv.trim()}"?`)){
+    fetch("/api/studio/glossary",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({wrong:cur.trim(),right:nv.trim()})}).then(()=>toast("Glossary updated"));
+  }
+}
+let saveT=null;
+function saveTranscript(){ clearTimeout(saveT); saveT=setTimeout(()=>{ fetch(`/api/studio/${project}/transcript`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({segments:SEG})}).then(()=>toast("Saved")); },800); }
+
+function renderCuts(){
+  const box=$("cutlist"); box.innerHTML="";
+  CUTS.forEach((c,i)=>{
+    const row=document.createElement("div"); row.className="cutrow";
+    row.innerHTML=`<input type="checkbox" ${c.enabled?"checked":""}/><span class="ts num" data-t="${c.start}">${fmt(c.start)}</span><span class="tag">${c.type}</span><span style="flex:1;color:#9a9aa4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.text||""}</span>`;
+    row.querySelector("input").onchange=(e)=>{ c.enabled=e.target.checked; renderTranscript(); updateCutInfo(); saveCuts(); };
+    row.querySelector(".ts").onclick=()=>{ $("vid").currentTime=c.start; };
+    box.appendChild(row);
+  });
+  updateCutInfo();
+}
+function updateCutInfo(){ const on=CUTS.filter(c=>c.enabled).length; $("cutinfo").textContent=`${CUTS.length} cuts, ${on} on`; }
+let cutT=null;
+function saveCuts(){ clearTimeout(cutT); cutT=setTimeout(()=>{ fetch(`/api/studio/${project}/cuts`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({cuts:CUTS})}); },600); }
+document.querySelectorAll("[data-batch]").forEach(b=>b.onclick=()=>{
+  const m=b.dataset.batch;
+  CUTS.forEach(c=>{ if(m==="all")c.enabled=true; else if(m==="none")c.enabled=false; else if(m==="filler")c.enabled=c.type==="filler"; else if(m==="fillergap")c.enabled=c.type==="filler"||c.type==="gap"; });
+  renderCuts(); renderTranscript(); saveCuts();
+});
+
+function renderSpeakers(speakers){
+  const box=$("speakers-box"); box.innerHTML="";
+  if(!speakers||!speakers.length){ $("spknote").classList.remove("hidden"); $("applyspk").classList.add("hidden"); return; }
+  $("spknote").classList.add("hidden"); $("applyspk").classList.remove("hidden");
+  speakers.forEach(s=>{
+    const r=document.createElement("div"); r.className="spkrow";
+    r.innerHTML=`<span class="spk">${s}</span><input type="text" data-spk="${s}" placeholder="real name" />`;
+    box.appendChild(r);
+  });
+  $("applyspk").onclick=async()=>{
+    const map={}; box.querySelectorAll("input").forEach(i=>{ if(i.value.trim()) map[i.dataset.spk]=i.value.trim(); });
+    if(!Object.keys(map).length) return;
+    await fetch(`/api/studio/${project}/speakers`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({mapping:map})});
+    const seg=await fetch(`/api/studio/${project}/segments`).then(r=>r.json()); SEG=seg.segments; renderTranscript(); renderSpeakers(seg.speakers); toast("Speakers renamed");
+  };
+}
+
+function renderFlags(flags){
+  const fp=$("flags");
+  if(!flags||!flags.length){ $("flagspanel").classList.add("hidden"); return; }
+  $("flagspanel").classList.remove("hidden");
+  fp.innerHTML=flags.map(f=>`<div class="flag"><b>${f.term}</b>${f.suggestion?" &rarr; "+f.suggestion:""} <span class="mut">${f.note||""}</span></div>`).join("");
+}
+
+$("vid").addEventListener("timeupdate",()=>{
+  const t=$("vid").currentTime;
+  document.querySelectorAll(".seg").forEach(d=>{ d.classList.toggle("active", t>=+d.dataset.s && t<+d.dataset.e); });
+  document.querySelectorAll(".w").forEach(w=>{ const m=+w.dataset.mid; w.classList.toggle("here", t>=+w.dataset.t && t<+w.dataset.t+0.6); });
+});
+
+function addTrimmedLink(){ if(document.getElementById("trimdl"))return; const a=document.createElement("a"); a.id="trimdl"; a.className="dl"; a.href=`/api/studio/${project}/download/trimmed`; a.textContent="Download trimmed video"; $("downloads").appendChild(a); }
+$("render").onclick=async()=>{
+  $("render").disabled=true; $("cutinfo").textContent="Rendering...";
+  try{ await fetch(`/api/studio/${project}/cuts`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({cuts:CUTS})});
+    const res=await fetch(`/api/studio/${project}/render`,{method:"POST"}).then(r=>r.json());
+    await pollTask(res.task_id,t=>{$("cutinfo").textContent=t.message;});
+    $("cutinfo").textContent="Trimmed video ready"; addTrimmedLink();
+    $("vid").src=`/api/studio/${project}/download/trimmed`;
+  }catch(e){ $("cutinfo").textContent="Error: "+e.message; } finally{ $("render").disabled=false; }
 };
 
-function postBlock(label, text) {
-  const wrap = document.createElement("div");
-  wrap.className = "post";
-  wrap.innerHTML = `<div class="lab">${label}</div><div class="txt">${text}</div>`;
-  const b = document.createElement("button");
-  b.className = "ghost mini"; b.textContent = "Copy";
-  b.onclick = () => copyText(text, b);
-  wrap.appendChild(b);
-  return wrap;
+$("makeclips").onclick=async()=>{
+  const aspects=[...document.querySelectorAll(".asp:checked")].map(c=>c.value).join(",")||"9:16";
+  $("makeclips").disabled=true; $("clipinfo").textContent="Rendering clips...";
+  try{ const res=await fetch(`/api/studio/${project}/clips`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({aspects})}).then(r=>r.json());
+    await pollTask(res.task_id,t=>{$("clipinfo").textContent=t.message;}); await loadClips(); $("clipinfo").textContent="Clips ready";
+  }catch(e){ $("clipinfo").textContent="Error: "+e.message; } finally{ $("makeclips").disabled=false; }
+};
+async function loadClips(){
+  const clips=await fetch(`/api/studio/${project}/clips`).then(r=>r.json()).catch(()=>[]);
+  const box=$("clips"); if(!clips.length){ box.innerHTML=""; return; }
+  box.innerHTML=clips.map(c=>{ const cp=c.copy||{}; const tags=(cp.hashtags||[]).join(" ");
+    return `<div class="clip"><video src="/api/studio/${project}/clip/${encodeURIComponent(c.filename)}" controls muted></video>
+      <div class="meta"><div class="t">${cp.title||c.base}</div><div class="c">${cp.caption||""}</div><div class="h">${tags}</div>
+      <div class="row mt"><a class="dl" href="/api/studio/${project}/clip/${encodeURIComponent(c.filename)}" download>Download</a><button class="ghost mini copybtn">Copy caption</button></div></div></div>`;
+  }).join("");
+  [...box.querySelectorAll(".copybtn")].forEach((btn,i)=>{ const c=clips[i].copy||{}; const all=[c.title,c.caption,(c.hashtags||[]).join(" ")].filter(Boolean).join("\n"); btn.onclick=()=>copyText(all,btn); });
 }
 
-function renderSocials(s) {
-  const box = $("socials"); box.innerHTML = "";
-  if (!s) return;
-  if (s.episode) {
-    if (s.episode.farcaster) box.appendChild(postBlock("Farcaster", s.episode.farcaster));
-    if (s.episode.x) box.appendChild(postBlock("X", s.episode.x));
-  }
-  (s.clips || []).forEach(c => box.appendChild(postBlock("Clip - " + c.clip, c.post)));
-}
+$("makesocials").onclick=async()=>{
+  $("makesocials").disabled=true; $("socialinfo").textContent="Drafting...";
+  try{ const res=await fetch(`/api/studio/${project}/socials`,{method:"POST"}).then(r=>r.json());
+    const done=await pollTask(res.task_id,t=>{$("socialinfo").textContent=t.message;}); renderSocials(done.result); $("socialinfo").textContent="";
+  }catch(e){ $("socialinfo").textContent="Error: "+e.message; } finally{ $("makesocials").disabled=false; }
+};
+function postBlock(label,text){ const w=document.createElement("div"); w.className="post"; w.innerHTML=`<div class="lab">${label}</div><div class="txt">${text}</div>`; const b=document.createElement("button"); b.className="ghost mini"; b.textContent="Copy"; b.onclick=()=>copyText(text,b); w.appendChild(b); return w; }
+function renderSocials(s){ const box=$("socials"); box.innerHTML=""; if(!s)return; if(s.episode){ if(s.episode.farcaster)box.appendChild(postBlock("Farcaster",s.episode.farcaster)); if(s.episode.x)box.appendChild(postBlock("X",s.episode.x)); } (s.clips||[]).forEach(c=>box.appendChild(postBlock("Clip - "+c.clip,c.post))); }
 </script>
 </body>
 </html>

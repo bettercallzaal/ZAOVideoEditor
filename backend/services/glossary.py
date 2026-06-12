@@ -166,6 +166,28 @@ def format_numbers(text: str) -> str:
     return text
 
 
+def add_safe_correction(wrong: str, right: str, path: Optional[Path] = None) -> dict:
+    """Teach the glossary a new safe correction (wrong -> right), persisted.
+
+    Idempotent on the lowercased wrong form. Returns the updated corrections dict.
+    This is how the UI's 'fix a term' makes a correction stick for every future
+    recording.
+    """
+    p = path or CORRECTIONS_PATH
+    wrong = (wrong or "").strip()
+    right = (right or "").strip()
+    if not wrong or not right:
+        raise ValueError("Both the wrong and correct terms are required")
+    data = {"safe": {}, "review": []}
+    if p.exists():
+        with open(p) as f:
+            data = json.load(f)
+    data.setdefault("safe", {})[wrong.lower()] = right
+    with open(p, "w") as f:
+        json.dump(data, f, indent=2)
+    return {"safe": data.get("safe", {}), "review": data.get("review", [])}
+
+
 def correct_transcript_text(text: str, corrections: Optional[dict] = None,
                             do_number_format: bool = False) -> dict:
     """Full stage-C pass over a block of text.
