@@ -60,11 +60,47 @@ def _dedupe_flags(flags: list) -> list:
     return out
 
 
-def process_recording(media_path: str, title: str = "", quality: str = "standard",
-                      out_dir: Optional[str] = None, readable_llm: bool = True,
-                      plan_cuts: bool = True, suggest_falsestarts: bool = False,
+def _transcribe(audio_path: str, quality: str, engine: str, progress) -> dict:
+    """Route transcription. Groq (cloud, near-instant, free tier) when available
+    and requested; otherwise faster-whisper at the chosen local model size.
+
+    quality: fast=base, balanced=small, best=large-v3 (slow on CPU).
+    engine:  auto (groq if GROQ_API_KEY set, else local), groq, local.
+    """
+    from .tool_availability import check_tool
+    use_groq = engine == "groq" or (engine == "auto" and check_tool("groq"))
+    if use_groq:
+        try:
+            from .groq_service import transcribe_audio_groq
+            progress(20, "Transcribing on Groq (fast cloud)...")
+            return transcribe_audio_groq(
+                audio_path,
+                on_progress=lambda pct, msg: progress(15 + int(pct * 0.6), msg),
+            )
+        except Exception as e:
+            progress(16, f"Groq unavailable ({e}); using local model...")
+
+    # local faster-whisper. Map our speed labels onto the engine's model + quality.
+    # fast -> base (forced by quality="fast"); balanced -> small (single pass);
+    # best -> large-v3 single pass (quality="standard"). Avoid "high" (3-pass, 3x slower).
+    q = {"fast": "fast", "balanced": "balanced", "best": "standard"}.get(quality, "fast")
+    model = {"fast": "base", "balanced": "small", "best": "large-v3"}.get(quality, "base")
+    progress(18, f"Transcribing with the {model} model...")
+    return transcribe_audio(
+        audio_path, model_size=model, quality=q,
+        on_progress=lambda stage, pct, msg: progress(15 + int(pct * 0.6), msg),
+    )
+
+
+def process_recording(media_path: str, title: str = "", quality: str = "fast",
+                      engine: str = "auto", out_dir: Optional[str] = None,
+                      readable_llm: bool = True, plan_cuts: bool = True,
+                      suggest_falsestarts: bool = False,
                       on_progress: Optional[Callable[[int, str], None]] = None) -> dict:
     """Run the headless transcript pipeline on a media file.
+
+    quality: fast (base model, default - viable on CPU) | balanced (small) | best (large-v3).
+    engine:  auto (Groq if GROQ_API_KEY set, else local) | groq | local.
 
     Returns a dict with the corrected segments, the readable markdown, review
     flags, glossary changes, an edit sheet (cut plan), and (if out_dir given) the
@@ -82,11 +118,7 @@ def process_recording(media_path: str, title: str = "", quality: str = "standard
     audio_path, tmp = _ensure_audio(media)
 
     try:
-        progress(15, "Transcribing...")
-        data = transcribe_audio(
-            str(audio_path), quality=quality,
-            on_progress=lambda stage, pct, msg: progress(15 + int(pct * 0.6), msg),
-        )
+        data = _transcribe(str(audio_path), quality, engine, progress)
     finally:
         if tmp and tmp.exists():
             tmp.unlink()

@@ -63,9 +63,17 @@
   <div class="row">
     <button id="go" disabled>Process recording</button>
     <button id="golink" class="ghost">Process from link</button>
+    <label class="chk">Speed:
+      <select id="quality" style="background:#0d0d12;border:1px solid var(--line);border-radius:6px;color:#e8e8ea;padding:6px 8px;">
+        <option value="fast" selected>Fast (base model - recommended)</option>
+        <option value="balanced">Balanced (small model)</option>
+        <option value="best">Best (large-v3 - slow on CPU)</option>
+      </select>
+    </label>
     <label class="chk"><input id="speakers" type="checkbox" /> Detect speakers</label>
     <span id="picked" class="muted"></span>
   </div>
+  <p class="muted" style="margin-top:8px">Tip: transcription runs on your CPU. For long recordings, set a <strong>GROQ_API_KEY</strong> (free at console.groq.com) before launch and it auto-uses Groq - a 17-minute file finishes in seconds instead of minutes.</p>
 
   <div id="progress" class="panel hidden">
     <h2>Working</h2>
@@ -170,13 +178,14 @@ $("go").onclick = () => {
   fd.append("file", chosen);
   fd.append("title", $("title").value);
   fd.append("speakers", $("speakers").checked);
+  fd.append("quality", $("quality").value);
   runProcess("/api/studio/process", fd, true);
 };
 
 $("golink").onclick = () => {
   const url = $("url").value.trim();
   if (!url) { $("picked").textContent = "Paste a link first"; return; }
-  const body = new URLSearchParams({ url, title: $("title").value, speakers: $("speakers").checked });
+  const body = new URLSearchParams({ url, title: $("title").value, speakers: $("speakers").checked, quality: $("quality").value });
   runProcess("/api/studio/ingest", body, false);
 };
 
