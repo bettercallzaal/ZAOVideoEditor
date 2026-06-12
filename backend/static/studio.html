@@ -11,33 +11,45 @@
   header { padding:20px 24px; border-bottom:1px solid var(--line); }
   h1 { margin:0; color:var(--orange); font-size:20px; }
   header p { margin:4px 0 0; color:#8a8a94; font-size:13px; }
-  main { max-width:880px; margin:0 auto; padding:24px; }
-  .drop { border:2px dashed var(--line); border-radius:12px; padding:40px; text-align:center; cursor:pointer; transition:.15s; }
+  main { max-width:920px; margin:0 auto; padding:24px; }
+  .drop { border:2px dashed var(--line); border-radius:12px; padding:36px; text-align:center; cursor:pointer; transition:.15s; }
   .drop.over { border-color:var(--orange); background:rgba(255,107,53,.06); }
   .drop strong { color:#e8e8ea; }
   .drop small { color:#8a8a94; }
-  input[type=text] { width:100%; margin-top:14px; background:#0d0d12; border:1px solid var(--line); border-radius:8px; padding:10px 12px; color:#e8e8ea; }
+  input[type=text],input[type=url] { width:100%; background:#0d0d12; border:1px solid var(--line); border-radius:8px; padding:10px 12px; color:#e8e8ea; }
+  .or { text-align:center; color:#6a6a74; font-size:12px; margin:14px 0; letter-spacing:.08em; }
   button { background:var(--orange); color:#0a0a0a; border:0; border-radius:8px; padding:10px 16px; font-weight:600; cursor:pointer; }
   button:disabled { opacity:.4; cursor:default; }
   button.ghost { background:transparent; color:#cfcfd6; border:1px solid var(--line); }
+  button.mini { padding:4px 10px; font-size:12px; }
   .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:14px; }
+  label.chk { display:flex; gap:6px; align-items:center; font-size:13px; color:#cfcfd6; cursor:pointer; }
   .bar { height:8px; background:#1d1d24; border-radius:99px; overflow:hidden; margin-top:14px; }
   .bar > div { height:100%; background:var(--orange); width:0; transition:width .3s; }
   .muted { color:#8a8a94; font-size:13px; }
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px; margin-top:18px; }
   .panel h2 { margin:0 0 10px; font-size:15px; color:var(--cyan); }
-  pre { white-space:pre-wrap; word-wrap:break-word; background:#0d0d12; border:1px solid var(--line); border-radius:8px; padding:14px; max-height:380px; overflow:auto; font:13px/1.6 ui-monospace,monospace; }
+  pre { white-space:pre-wrap; word-wrap:break-word; background:#0d0d12; border:1px solid var(--line); border-radius:8px; padding:14px; max-height:340px; overflow:auto; font:13px/1.6 ui-monospace,monospace; }
   .flag { font-size:13px; padding:6px 0; border-bottom:1px solid var(--line); }
   .flag b { color:var(--orange); }
   a.dl { color:var(--cyan); text-decoration:none; font-size:13px; margin-right:16px; }
   a.dl:hover { text-decoration:underline; }
   .hidden { display:none; }
+  .clip { display:flex; gap:14px; padding:12px 0; border-bottom:1px solid var(--line); }
+  .clip video { width:160px; border-radius:8px; background:#000; }
+  .clip .meta { flex:1; }
+  .clip .meta .t { font-weight:600; }
+  .clip .meta .c { color:#b9b9c2; font-size:13px; margin:4px 0; }
+  .clip .meta .h { color:var(--cyan); font-size:12px; }
+  .post { border:1px solid var(--line); border-radius:8px; padding:12px; margin-top:10px; }
+  .post .lab { font-size:11px; color:#7a7a84; text-transform:uppercase; letter-spacing:.06em; }
+  .post .txt { margin:4px 0 8px; font-size:14px; }
 </style>
 </head>
 <body>
 <header>
   <h1>ZAO Recordings Studio</h1>
-  <p>Drop a workshop or show recording. Get a clean transcript, a brand-corrected read, and a trimmed video. No setup.</p>
+  <p>Drop a recording or paste a link. Get a clean transcript, a trimmed video, postable clips, and drafted social posts. No setup.</p>
 </header>
 <main>
   <div id="drop" class="drop">
@@ -45,9 +57,13 @@
     <small>mp4, mov, mkv, webm, or an audio file</small>
     <input id="file" type="file" accept="video/*,audio/*" class="hidden" />
   </div>
-  <input id="title" type="text" placeholder="Title (optional - defaults to the filename)" />
+  <div class="or">- OR PASTE A LINK -</div>
+  <input id="url" type="url" placeholder="YouTube / Twitch / Restream / .m3u8 / .mp4 URL" />
+  <input id="title" type="text" placeholder="Title (optional - defaults to the filename)" style="margin-top:10px" />
   <div class="row">
     <button id="go" disabled>Process recording</button>
+    <button id="golink" class="ghost">Process from link</button>
+    <label class="chk"><input id="speakers" type="checkbox" /> Detect speakers</label>
     <span id="picked" class="muted"></span>
   </div>
 
@@ -62,10 +78,32 @@
       <h2>Outputs</h2>
       <div class="row" id="downloads"></div>
       <div class="row">
-        <button id="render" class="ghost">Make trimmed video</button>
+        <button id="render" class="ghost mini">Make trimmed video</button>
         <span id="cutinfo" class="muted"></span>
       </div>
     </div>
+
+    <div class="panel">
+      <h2>Clips for distribution</h2>
+      <div class="row">
+        <label class="chk"><input type="checkbox" class="asp" value="9:16" checked /> 9:16</label>
+        <label class="chk"><input type="checkbox" class="asp" value="1:1" /> 1:1</label>
+        <label class="chk"><input type="checkbox" class="asp" value="16:9" /> 16:9</label>
+        <button id="makeclips" class="ghost mini">Make clips</button>
+        <span id="clipinfo" class="muted"></span>
+      </div>
+      <div id="clips"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Social posts</h2>
+      <div class="row">
+        <button id="makesocials" class="ghost mini">Draft social posts</button>
+        <span id="socialinfo" class="muted"></span>
+      </div>
+      <div id="socials"></div>
+    </div>
+
     <div class="panel" id="flagspanel">
       <h2>Review these by hand</h2>
       <div id="flags"></div>
@@ -104,28 +142,42 @@ async function pollTask(taskId, onProgress) {
     await new Promise(r => setTimeout(r, 1200));
   }
 }
-
 function setProgress(pct, msg) { $("barfill").style.width = (pct||0) + "%"; $("status").textContent = msg || ""; }
+function copyText(t, btn) { navigator.clipboard.writeText(t).then(() => { const o = btn.textContent; btn.textContent = "Copied"; setTimeout(() => btn.textContent = o, 1200); }); }
 
-$("go").onclick = async () => {
-  if (!chosen) return;
-  $("go").disabled = true;
+async function runProcess(endpoint, body, isForm) {
+  $("go").disabled = true; $("golink").disabled = true;
   $("results").classList.add("hidden");
   $("progress").classList.remove("hidden");
-  setProgress(2, "Uploading...");
+  setProgress(2, "Starting...");
   try {
-    const fd = new FormData();
-    fd.append("file", chosen);
-    fd.append("title", $("title").value);
-    const res = await fetch("/api/studio/process", { method: "POST", body: fd }).then(r => r.json());
+    const opts = isForm ? { method: "POST", body } : { method: "POST", headers: {"Content-Type":"application/x-www-form-urlencoded"}, body };
+    const res = await fetch(endpoint, opts).then(r => r.json());
+    if (res.detail) throw new Error(res.detail);
     project = res.project;
     await pollTask(res.task_id, t => setProgress(t.progress, t.message));
     await showResults();
   } catch (e) {
     setProgress(100, "Error: " + e.message);
   } finally {
-    $("go").disabled = false;
+    $("go").disabled = false; $("golink").disabled = false;
   }
+}
+
+$("go").onclick = () => {
+  if (!chosen) return;
+  const fd = new FormData();
+  fd.append("file", chosen);
+  fd.append("title", $("title").value);
+  fd.append("speakers", $("speakers").checked);
+  runProcess("/api/studio/process", fd, true);
+};
+
+$("golink").onclick = () => {
+  const url = $("url").value.trim();
+  if (!url) { $("picked").textContent = "Paste a link first"; return; }
+  const body = new URLSearchParams({ url, title: $("title").value, speakers: $("speakers").checked });
+  runProcess("/api/studio/ingest", body, false);
 };
 
 async function showResults() {
@@ -133,13 +185,10 @@ async function showResults() {
   $("progress").classList.add("hidden");
   $("results").classList.remove("hidden");
   $("readable").textContent = r.readable || "(empty)";
-
-  const dl = $("downloads"); dl.innerHTML = "";
-  dl.innerHTML = `
+  $("downloads").innerHTML = `
     <a class="dl" href="/api/studio/${project}/download/readable">Download readable transcript</a>
     <a class="dl" href="/api/studio/${project}/download/cut">Download timestamped transcript</a>
     <a class="dl" href="/api/studio/${project}/download/editsheet">Download edit sheet</a>`;
-
   const enabled = (r.edit_sheet.cuts || []).filter(c => c.enabled).length;
   $("cutinfo").textContent = `${(r.edit_sheet.cuts||[]).length} cuts planned, ${enabled} on by default`;
 
@@ -151,6 +200,7 @@ async function showResults() {
       `<div class="flag"><b>${f.term}</b>${f.suggestion ? " &rarr; " + f.suggestion : ""} <span class="muted">${f.note||""}</span></div>`).join("");
   }
   if (r.has_trimmed) addTrimmedLink();
+  loadClips();
 }
 
 function addTrimmedLink() {
@@ -162,19 +212,88 @@ function addTrimmedLink() {
 }
 
 $("render").onclick = async () => {
-  $("render").disabled = true;
-  $("cutinfo").textContent = "Rendering...";
+  $("render").disabled = true; $("cutinfo").textContent = "Rendering...";
   try {
     const res = await fetch(`/api/studio/${project}/render`, { method: "POST" }).then(r => r.json());
     await pollTask(res.task_id, t => { $("cutinfo").textContent = t.message; });
-    $("cutinfo").textContent = "Trimmed video ready";
-    addTrimmedLink();
-  } catch (e) {
-    $("cutinfo").textContent = "Error: " + e.message;
-  } finally {
-    $("render").disabled = false;
-  }
+    $("cutinfo").textContent = "Trimmed video ready"; addTrimmedLink();
+  } catch (e) { $("cutinfo").textContent = "Error: " + e.message; }
+  finally { $("render").disabled = false; }
 };
+
+$("makeclips").onclick = async () => {
+  const aspects = [...document.querySelectorAll(".asp:checked")].map(c => c.value).join(",") || "9:16";
+  $("makeclips").disabled = true; $("clipinfo").textContent = "Rendering clips...";
+  try {
+    const res = await fetch(`/api/studio/${project}/clips`, {
+      method: "POST", headers: {"Content-Type":"application/x-www-form-urlencoded"},
+      body: new URLSearchParams({ aspects }),
+    }).then(r => r.json());
+    await pollTask(res.task_id, t => { $("clipinfo").textContent = t.message; });
+    await loadClips();
+    $("clipinfo").textContent = "Clips ready";
+  } catch (e) { $("clipinfo").textContent = "Error: " + e.message; }
+  finally { $("makeclips").disabled = false; }
+};
+
+async function loadClips() {
+  const clips = await fetch(`/api/studio/${project}/clips`).then(r => r.json()).catch(() => []);
+  const box = $("clips");
+  if (!clips.length) { box.innerHTML = ""; return; }
+  box.innerHTML = clips.map(c => {
+    const copy = c.copy || {};
+    const tags = (copy.hashtags || []).join(" ");
+    const all = [copy.title, copy.caption, tags].filter(Boolean).join("\n");
+    return `<div class="clip">
+      <video src="/api/studio/${project}/clip/${encodeURIComponent(c.filename)}" controls muted></video>
+      <div class="meta">
+        <div class="t">${copy.title || c.base}</div>
+        <div class="c">${copy.caption || ""}</div>
+        <div class="h">${tags}</div>
+        <div class="row">
+          <a class="dl" href="/api/studio/${project}/clip/${encodeURIComponent(c.filename)}" download>Download ${c.filename}</a>
+          <button class="ghost mini copybtn">Copy caption</button>
+        </div>
+      </div></div>`;
+  }).join("");
+  [...box.querySelectorAll(".copybtn")].forEach((btn, i) => {
+    const c = clips[i].copy || {};
+    const all = [c.title, c.caption, (c.hashtags||[]).join(" ")].filter(Boolean).join("\n");
+    btn.onclick = () => copyText(all, btn);
+  });
+}
+
+$("makesocials").onclick = async () => {
+  $("makesocials").disabled = true; $("socialinfo").textContent = "Drafting...";
+  try {
+    const res = await fetch(`/api/studio/${project}/socials`, { method: "POST" }).then(r => r.json());
+    const done = await pollTask(res.task_id, t => { $("socialinfo").textContent = t.message; });
+    renderSocials(done.result);
+    $("socialinfo").textContent = "";
+  } catch (e) { $("socialinfo").textContent = "Error: " + e.message; }
+  finally { $("makesocials").disabled = false; }
+};
+
+function postBlock(label, text) {
+  const wrap = document.createElement("div");
+  wrap.className = "post";
+  wrap.innerHTML = `<div class="lab">${label}</div><div class="txt">${text}</div>`;
+  const b = document.createElement("button");
+  b.className = "ghost mini"; b.textContent = "Copy";
+  b.onclick = () => copyText(text, b);
+  wrap.appendChild(b);
+  return wrap;
+}
+
+function renderSocials(s) {
+  const box = $("socials"); box.innerHTML = "";
+  if (!s) return;
+  if (s.episode) {
+    if (s.episode.farcaster) box.appendChild(postBlock("Farcaster", s.episode.farcaster));
+    if (s.episode.x) box.appendChild(postBlock("X", s.episode.x));
+  }
+  (s.clips || []).forEach(c => box.appendChild(postBlock("Clip - " + c.clip, c.post)));
+}
 </script>
 </body>
 </html>
