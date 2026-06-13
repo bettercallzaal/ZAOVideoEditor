@@ -48,6 +48,23 @@ def _find_input(project_dir: Path) -> Path:
     raise HTTPException(404, "No input media")
 
 
+import os as _os
+_MAX_UPLOAD_BYTES = int(float(_os.environ.get("STUDIO_MAX_UPLOAD_GB", "10")) * 1024 * 1024 * 1024)
+
+
+async def _save_upload(file, dest: Path):
+    """Stream an upload to disk, enforcing the configured size cap."""
+    total = 0
+    with open(dest, "wb") as f:
+        while chunk := await file.read(1024 * 1024):
+            total += len(chunk)
+            if total > _MAX_UPLOAD_BYTES:
+                f.close()
+                dest.unlink(missing_ok=True)
+                raise HTTPException(413, f"File too large (limit {_MAX_UPLOAD_BYTES // (1024**3)} GB)")
+            f.write(chunk)
+
+
 def _make_project(name: str, title: str, source: str) -> Path:
     project_dir = _project_dir(name)
     for sub in SUBDIRS:
@@ -91,9 +108,7 @@ async def process(file: UploadFile = File(...), title: str = Form(""),
     project_dir = _make_project(name, disp, "studio")
 
     dest = project_dir / "input" / f"main{ext}"
-    with open(dest, "wb") as f:
-        while chunk := await file.read(1024 * 1024):
-            f.write(chunk)
+    await _save_upload(file, dest)
 
     task_id = tm.create_task(name, "studio_process")
     tm.run_in_background(task_id, _do_process, project_dir, str(dest), disp, speakers, quality)
@@ -342,9 +357,7 @@ async def full(file: UploadFile = File(None), url: str = Form(""), title: str = 
         disp = title or Path(file.filename).stem
         project_dir = _make_project(_slug(disp), disp, "api")
         dest = project_dir / "input" / f"main{ext}"
-        with open(dest, "wb") as f:
-            while chunk := await file.read(1024 * 1024):
-                f.write(chunk)
+        await _save_upload(file, dest)
         media = str(dest)
         run = lambda tid: _do_full(tid, project_dir, media, disp, speakers, quality, clips, socials, asp)  # noqa: E731
     elif url:

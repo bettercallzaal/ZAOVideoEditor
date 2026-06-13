@@ -1,0 +1,34 @@
+# ZAO Recordings Studio - one command to run a shareable instance.
+#   docker compose up -d        # build + run, http://localhost:8000
+# Set a password before exposing it to anyone (see .env / STUDIO_PASSWORD).
+services:
+  studio:
+    build: .
+    ports:
+      - "${STUDIO_PORT:-8000}:8000"
+    volumes:
+      - ./projects:/app/projects        # recordings + outputs persist here
+      - studio-models:/models           # whisper models persist across restarts
+    environment:
+      # Access gate for a shared/public instance (leave blank for open/local).
+      STUDIO_PASSWORD: "${STUDIO_PASSWORD:-}"
+      # Concurrency + limits.
+      STUDIO_MAX_CONCURRENT: "${STUDIO_MAX_CONCURRENT:-1}"
+      STUDIO_MAX_UPLOAD_GB: "${STUDIO_MAX_UPLOAD_GB:-10}"
+      STUDIO_CORS_ORIGINS: "${STUDIO_CORS_ORIGINS:-}"
+      # Optional integrations (all degrade gracefully if unset).
+      GROQ_API_KEY: "${GROQ_API_KEY:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      HF_TOKEN: "${HF_TOKEN:-}"
+      NEYNAR_API_KEY: "${NEYNAR_API_KEY:-}"
+      FARCASTER_SIGNER_UUID: "${FARCASTER_SIGNER_UUID:-}"
+      X_API_KEY: "${X_API_KEY:-}"
+      X_API_SECRET: "${X_API_SECRET:-}"
+      X_ACCESS_TOKEN: "${X_ACCESS_TOKEN:-}"
+      X_ACCESS_SECRET: "${X_ACCESS_SECRET:-}"
+      BONFIRE_API_KEY: "${BONFIRE_API_KEY:-}"
+      BONFIRE_ID: "${BONFIRE_ID:-}"
+    restart: unless-stopped
+
+volumes:
+  studio-models:

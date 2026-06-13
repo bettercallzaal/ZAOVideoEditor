@@ -10,7 +10,9 @@ yet - that is Phase 2.
 """
 
 import json
+import os
 import tempfile
+import threading
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -18,6 +20,10 @@ from .whisper_service import transcribe_audio
 from .glossary import load_corrections, correct_transcript_text
 from .readable_pass import make_readable
 from .cut_planner import build_edit_sheet
+
+# Transcription is CPU-heavy; cap concurrent runs so a shared instance does not
+# thrash. STUDIO_MAX_CONCURRENT (default 1) - raise it on a beefy/GPU box.
+_TRANSCRIBE_GATE = threading.Semaphore(max(1, int(os.environ.get("STUDIO_MAX_CONCURRENT", "1"))))
 
 
 AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"}
@@ -131,12 +137,17 @@ def process_recording(media_path: str, title: str = "", quality: str = "fast",
     progress(5, "Preparing audio...")
     audio_path, tmp = _ensure_audio(media)
 
+    acquired = _TRANSCRIBE_GATE.acquire(timeout=0)
+    if not acquired:
+        progress(6, "Queued - waiting for a free transcription slot...")
+        _TRANSCRIBE_GATE.acquire()
     try:
         data = _transcribe(str(audio_path), quality, engine, progress)
         segments = data.get("segments", [])
         if detect_speakers:
             segments = _detect_speakers(str(audio_path), segments, progress)
     finally:
+        _TRANSCRIBE_GATE.release()
         if tmp and tmp.exists():
             tmp.unlink()
 

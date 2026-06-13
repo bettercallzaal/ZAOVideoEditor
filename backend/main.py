@@ -24,10 +24,20 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": msg},
     )
 
-# CORS for local development
+# Optional access password for shared/public deploys (no-op when unset).
+from .auth import AccessPasswordMiddleware
+app.add_middleware(AccessPasswordMiddleware)
+
+# CORS. Defaults to local dev origins; override with STUDIO_CORS_ORIGINS
+# (comma-separated, or "*") for a deployed instance.
+import os as _os
+_cors = _os.environ.get("STUDIO_CORS_ORIGINS", "").strip()
+_origins = ["http://localhost:5173", "http://localhost:3000", "http://localhost:8000"]
+if _cors:
+    _origins = ["*"] if _cors == "*" else [o.strip() for o in _cors.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
