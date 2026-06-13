@@ -187,6 +187,19 @@
         </div>
 
         <div class="panel">
+          <h2>ZABAL Gamez export <span class="mut" style="font-weight:300">- recaps.json block + transcript .md</span></h2>
+          <div class="row">
+            <input id="zg-num" type="text" placeholder="recording #" style="max-width:90px" />
+            <input id="zg-presenter" type="text" placeholder="presenter" style="max-width:160px" />
+            <input id="zg-youtube" type="text" placeholder="YouTube URL" style="max-width:220px" />
+            <input id="zg-track" type="text" placeholder="track (optional)" style="max-width:150px" />
+            <button id="zg-export" class="ghost mini">Build export</button>
+            <span id="zg-info" class="mut"></span>
+          </div>
+          <div id="zg-out"></div>
+        </div>
+
+        <div class="panel">
           <h2>Social posts</h2>
           <div class="row"><button id="makesocials" class="ghost mini">Draft social posts</button><span id="socialinfo" class="mut"></span></div>
           <div id="socials"></div>
@@ -456,6 +469,24 @@ async function saveBonfire(b){
   }catch(e){ b.textContent="Failed"; toast(e.message); setTimeout(()=>{b.textContent=o;b.disabled=false;},2200); }
 }
 function tsToS(ts){ const p=(ts||"0:00").split(":").map(Number); return p.length===3?p[0]*3600+p[1]*60+p[2]:p[0]*60+(p[1]||0); }
+
+$("zg-export").onclick=async()=>{
+  const b=$("zg-export"); b.disabled=true; $("zg-info").textContent="Building...";
+  try{
+    const body={number:parseInt($("zg-num").value||"0",10),presenter:$("zg-presenter").value,track:$("zg-track").value,youtube:$("zg-youtube").value};
+    const r=await fetch(`/api/studio/${project}/zabal-export`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(x=>x.json());
+    if(r.detail) throw new Error(r.detail);
+    $("zg-info").textContent="";
+    const blockJson=JSON.stringify(r.recaps_block,null,2);
+    $("zg-out").innerHTML=`<div class="lab" style="font-family:Syne;font-size:11px;color:#6a6a74;text-transform:uppercase;margin-top:10px">recaps.json block (paste into data/recaps.json)</div>`;
+    const pre=document.createElement("pre"); pre.textContent=blockJson; pre.style.maxHeight="240px"; pre.style.overflow="auto"; $("zg-out").appendChild(pre);
+    const cb=document.createElement("button"); cb.className="ghost mini"; cb.textContent="Copy recaps block"; cb.onclick=()=>copyText(blockJson,cb); $("zg-out").appendChild(cb);
+    const note=document.createElement("p"); note.className="mut"; note.style.marginTop="8px"; note.textContent=`Save the transcript to: ${r.transcript_path}`; $("zg-out").appendChild(note);
+    const dl=document.createElement("a"); dl.className="dl";
+    dl.href=URL.createObjectURL(new Blob([r.transcript_md],{type:"text/markdown"}));
+    dl.download=(r.transcript_path||"transcript.md").split("/").pop(); dl.textContent="Download transcript .md"; $("zg-out").appendChild(dl);
+  }catch(e){ $("zg-info").textContent="Error: "+e.message; } finally{ b.disabled=false; }
+};
 </script>
 </body>
 </html>
