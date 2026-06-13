@@ -140,3 +140,36 @@ def build_export(opts: dict, segments: list, insights: dict,
         bundle["output_dir"] = str(out)
         bundle["files"] = {"transcript": fname, "recaps_entry": f"recaps-entry-{n}.json"}
     return bundle
+
+
+def write_into_repo(repo_path: str, bundle: dict) -> dict:
+    """Drop the export straight into a local zabalgames checkout for review.
+
+    Writes the transcript .md to its path and inserts the recaps entry at the top
+    of data/recaps.json's `recaps` array (de-duped by transcript path, format
+    preserved). Does NOT commit or push - the user reviews `git diff` and commits/
+    PRs themselves. Returns what changed.
+    """
+    repo = Path(repo_path)
+    recaps_file = repo / "data" / "recaps.json"
+    transcript_dest = repo / bundle["transcript_path"]
+    if not recaps_file.exists():
+        raise RuntimeError(f"Not a zabalgames checkout (no {recaps_file})")
+
+    transcript_dest.parent.mkdir(parents=True, exist_ok=True)
+    transcript_dest.write_text(bundle["transcript_md"], encoding="utf-8")
+
+    data = json.loads(recaps_file.read_text())
+    recaps = data.get("recaps", [])
+    entry = bundle["recaps_entry"]
+    # replace an existing entry with the same transcript, else prepend (newest first)
+    recaps = [r for r in recaps if r.get("transcript") != entry.get("transcript")]
+    recaps.insert(0, entry)
+    data["recaps"] = recaps
+    recaps_file.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+    return {
+        "wrote_transcript": str(transcript_dest.relative_to(repo)),
+        "updated": "data/recaps.json",
+        "next": "Review git diff, run `node scripts/build-recordings-index.mjs`, then commit + PR.",
+    }

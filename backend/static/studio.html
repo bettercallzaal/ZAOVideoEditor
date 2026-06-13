@@ -194,6 +194,7 @@
             <input id="zg-presenter" type="text" placeholder="presenter" style="max-width:160px" />
             <input id="zg-youtube" type="text" placeholder="YouTube URL" style="max-width:220px" />
             <input id="zg-track" type="text" placeholder="track (optional)" style="max-width:150px" />
+            <label class="chk"><input id="zg-writerepo" type="checkbox" /> write into repo checkout</label>
             <button id="zg-export" class="ghost mini">Build export</button>
             <span id="zg-info" class="mut"></span>
           </div>
@@ -474,7 +475,7 @@ function tsToS(ts){ const p=(ts||"0:00").split(":").map(Number); return p.length
 $("zg-export").onclick=async()=>{
   const b=$("zg-export"); b.disabled=true; $("zg-info").textContent="Building...";
   try{
-    const body={number:parseInt($("zg-num").value||"0",10),presenter:$("zg-presenter").value,track:$("zg-track").value,youtube:$("zg-youtube").value};
+    const body={number:parseInt($("zg-num").value||"0",10),presenter:$("zg-presenter").value,track:$("zg-track").value,youtube:$("zg-youtube").value,write_to_repo:$("zg-writerepo").checked};
     const r=await fetch(`/api/studio/${project}/zabal-export`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(x=>x.json());
     if(r.detail) throw new Error(r.detail);
     $("zg-info").textContent="";
@@ -483,6 +484,7 @@ $("zg-export").onclick=async()=>{
     const pre=document.createElement("pre"); pre.textContent=blockJson; pre.style.maxHeight="240px"; pre.style.overflow="auto"; $("zg-out").appendChild(pre);
     const cb=document.createElement("button"); cb.className="ghost mini"; cb.textContent="Copy recaps block"; cb.onclick=()=>copyText(blockJson,cb); $("zg-out").appendChild(cb);
     const note=document.createElement("p"); note.className="mut"; note.style.marginTop="8px"; note.textContent=`Save the transcript to: ${r.transcript_path}`; $("zg-out").appendChild(note);
+    if(r.repo_write){ const rw=document.createElement("p"); rw.className="mut"; rw.style.marginTop="6px"; rw.style.color=r.repo_write.error?"#ff6b35":"#00e5ff"; rw.textContent=r.repo_write.error?("Repo write: "+r.repo_write.error):("Written into checkout: "+r.repo_write.wrote_transcript+" + recaps.json. "+r.repo_write.next); $("zg-out").appendChild(rw); }
     const dl=document.createElement("a"); dl.className="dl";
     dl.href=URL.createObjectURL(new Blob([r.transcript_md],{type:"text/markdown"}));
     dl.download=(r.transcript_path||"transcript.md").split("/").pop(); dl.textContent="Download transcript .md"; $("zg-out").appendChild(dl);
