@@ -1020,6 +1020,30 @@ async def live_suggested_marks(project: str):
     return {"suggestions": auto_marks.suggest_marks(segs)}
 
 
+def _do_live_recap(task_id: str, project_dir: Path):
+    from ..services import live_recap
+    tm.update_task(task_id, progress=40, message="Writing the recap from the live transcript...")
+    try:
+        insights = live_recap.build_live_recap(project_dir, project_name=_project_title(project_dir))
+    except ValueError as e:
+        raise RuntimeError(str(e))
+    except Exception as e:
+        raise RuntimeError(f"Recap needs an LLM (claude CLI or OPENAI/GROQ key): {e}")
+    tm.update_task(task_id, progress=95, message="Recap ready")
+    return insights
+
+
+@router.post("/{project}/live/recap")
+async def live_recap_endpoint(project: str):
+    """Recap + chapters + suggested clips straight from the live transcript (no VOD needed)."""
+    project_dir = _project_dir(project)
+    if not project_dir.exists():
+        raise HTTPException(404, "Project not found")
+    task_id = tm.create_task(project, "studio_insights")
+    tm.run_in_background(task_id, _do_live_recap, project_dir)
+    return {"task_id": task_id}
+
+
 @router.get("/page", response_class=HTMLResponse)
 async def page():
     html = STATIC_DIR / "studio.html"

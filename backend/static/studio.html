@@ -191,6 +191,10 @@
         <div id="np-out"></div>
         <hr style="border:none;border-top:1px solid var(--line);margin:14px 0" />
         <div class="row">
+          <button id="live-recap" class="ghost mini">End-of-stream recap</button>
+          <span id="live-recapinfo" class="mut">Recap + chapters + clip ideas from the live transcript (no VOD needed).</span>
+        </div>
+        <div class="row mt">
           <input id="live-vod" type="url" placeholder="VOD URL (YouTube / Restream / .mp4) after the stream" style="flex:1" />
           <label class="chk"><input id="live-vodcap" type="checkbox" /> YouTube captions</label>
           <button id="live-vodgo" class="ghost mini">Attach VOD + process</button>
@@ -424,6 +428,17 @@ $("live-mark").onclick=async()=>{
   }catch(e){ toast("Error: "+e.message); }
 };
 $("live-note").onkeydown=(e)=>{ if(e.key==="Enter"){ e.preventDefault(); $("live-mark").click(); } };
+$("live-recap").onclick=async()=>{
+  if(!LIVE.project)return;
+  $("live-recapinfo").textContent="Writing recap...";
+  try{
+    const r=await fetch(`/api/studio/${LIVE.project}/live/recap`,{method:"POST"}).then(x=>x.json());
+    if(r.detail) throw new Error(r.detail);
+    const t=await pollTask(r.task_id,t=>$("live-recapinfo").textContent=t.message||"");
+    const ins=(t.result)||{};
+    $("live-recapinfo").textContent="Recap ready"+(ins.chapters?` - ${ins.chapters.length} chapters`:"");
+  }catch(e){ $("live-recapinfo").textContent="Error: "+e.message; }
+};
 $("live-vodgo").onclick=()=>{
   const url=$("live-vod").value.trim(); if(!url){ toast("Paste the VOD URL first"); return; }
   if(!LIVE.project)return;
