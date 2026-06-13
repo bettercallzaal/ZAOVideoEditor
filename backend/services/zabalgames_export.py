@@ -1,14 +1,15 @@
-"""Export a processed recording into the ZABAL Gamez repo's exact formats.
+"""Export a processed recording into the ZAODEVZ/zabalgames repo's exact formats.
 
-The team's #1 pain is hand-building /recordings/N.html pages. The fix that "wins
-forever" (their words): emit the recap as DATA - a recaps.json block - so the
-page renders from data, plus the transcript .md the archive + page link expect.
-This module produces those, from the Studio's transcript + insights.
+The team's #1 pain is hand-building /recordings/N.html; the fix that "wins forever"
+is emitting the recap as DATA - a data/recaps.json entry - so the page renders from
+it. This module produces that entry + the clean transcript .md, matching the real
+schemas in github.com/ZAODEVZ/zabalgames (verified 2026-06-13).
 
-Field list confirmed by the ZABAL Gamez team:
-  recaps block: date, presenter, track, summary, topics, takeaways, chapters,
-                youtube, transcript
-Brand rules (enforced): no emojis, no em dashes, exact casing.
+recaps.json entry fields (only emit links/files that exist):
+  date, type, title, presenter, handle, org, track, format, thumbnail, summary,
+  topics[], recording, youtube, page, transcript, link, link_label, takeaways[],
+  share_topics[], okd
+Brand rules enforced: no emojis, no em dashes, exact casing.
 """
 
 import json
@@ -16,8 +17,8 @@ import re
 from pathlib import Path
 from typing import Optional
 
-
 TRANSCRIPT_DIR = "data/streams/zabal-games-workshops/raw/transcripts"
+SHOW = "ZABAL Gamez Workshops"
 
 
 def _slug(text: str) -> str:
@@ -25,7 +26,6 @@ def _slug(text: str) -> str:
 
 
 def _clean(text: str) -> str:
-    """Strip em dashes / decorative unicode per brand rules."""
     return (text or "").replace("—", "-").replace("–", "-").replace("•", "-")
 
 
@@ -40,19 +40,30 @@ def transcript_filename(date: str, presenter: str, topic: str) -> str:
     return f"{date}-{_slug(presenter)}-{_slug(topic)}.md"
 
 
-def transcript_md(segments: list, title: str, date: str, presenter: str,
-                  track: str = "", youtube: str = "") -> str:
-    """The clean transcript .md with frontmatter for the archive + page link."""
-    fm = [
-        "---",
-        f"title: {title}",
-        f"date: {date}",
-        f"presenter: {presenter}",
-    ]
+def _share_topics(title: str, topics: list) -> list:
+    """Natural 'I'm watching ...' phrases for the randomized share buttons."""
+    out = [f"{title}"]
+    for t in topics[:3]:
+        out.append(t)
+    return [_clean(s) for s in out if s][:4]
+
+
+def transcript_md(segments: list, title: str, date_iso: str, presenter: str,
+                  track: str = "", youtube: str = "", episode: Optional[int] = None,
+                  thumbnail: str = "") -> str:
+    """Clean transcript .md with frontmatter matching the zabalgames shape."""
+    fm = ["---", f"title: {title}", f"show: {SHOW}"]
+    if episode:
+        fm.append(f"episode: {episode}")
+    fm += [f"guest: {presenter}", "host: Zaal", f"date: {date_iso}",
+           "format: video-livestream-workshop"]
+    if thumbnail:
+        fm.append(f"thumbnail: {thumbnail}")
+    fm.append("language: en")
     if track:
         fm.append(f"track: {track}")
     if youtube:
-        fm.append(f"youtube: {youtube_id(youtube)}")
+        fm.append(f"youtube: https://youtu.be/{youtube_id(youtube)}")
     fm.append("---")
     lines = ["\n".join(fm), "", f"# {title}", ""]
     for seg in segments:
@@ -65,58 +76,67 @@ def transcript_md(segments: list, title: str, date: str, presenter: str,
     return "\n".join(lines)
 
 
-def recaps_block(number: int, title: str, date: str, presenter: str,
-                 insights: dict, transcript_path: str, track: str = "",
-                 youtube: str = "") -> dict:
-    """The ready-to-paste recaps.json entry. Fields per the ZABAL Gamez spec."""
-    chapters = [
-        {"time": c.get("time", ""), "title": _clean(c.get("title", ""))}
-        for c in insights.get("chapters", []) if c.get("title")
-    ]
-    topics = [c["title"] for c in chapters][:12]
+def recaps_entry(opts: dict, insights: dict, transcript_path: str) -> dict:
+    """The data/recaps.json entry. Omits optional fields that are empty."""
+    chapters = [c.get("title", "") for c in insights.get("chapters", []) if c.get("title")]
+    topics = [_clean(t) for t in chapters][:8] or [_clean(opts.get("title", ""))]
     takeaways = [_clean(q.get("text", "")) for q in insights.get("quotes", []) if q.get("text")][:6]
     summary = _clean(insights.get("recap", "")).strip()
 
-    block = {
-        "id": number,
-        "date": date,
-        "presenter": presenter,
-        "track": track,
-        "title": title,
+    entry = {
+        "date": opts.get("date", ""),
+        "type": opts.get("type", "workshop"),
+        "title": opts.get("title", ""),
+        "presenter": opts.get("presenter", ""),
+        "track": opts.get("track", "builder"),
+        "format": opts.get("format", "livestreamed and recorded"),
         "summary": summary,
         "topics": topics,
         "takeaways": takeaways,
-        "chapters": chapters,
-        "youtube": youtube_id(youtube),
+        "share_topics": _share_topics(opts.get("title", ""), topics),
         "transcript": transcript_path,
     }
-    return block
+    # optional fields - only include when present (per the recaps.json _note)
+    for k in ("handle", "org", "thumbnail", "recording", "link", "link_label", "okd"):
+        if opts.get(k):
+            entry[k] = opts[k]
+    if opts.get("number"):
+        entry["page"] = f"/recordings/{opts['number']}"
+    if opts.get("youtube"):
+        entry["youtube"] = f"https://youtu.be/{youtube_id(opts['youtube'])}"
+    return entry
 
 
-def build_export(number: int, title: str, date: str, presenter: str,
-                 segments: list, insights: dict, track: str = "",
-                 youtube: str = "", out_dir: Optional[Path] = None) -> dict:
-    """Assemble the full ZABAL Gamez export bundle for a recording."""
-    fname = transcript_filename(date, presenter, title)
+def build_export(opts: dict, segments: list, insights: dict,
+                 out_dir: Optional[Path] = None) -> dict:
+    """opts: title, date, presenter, track, type, handle, org, youtube, number,
+    episode, thumbnail, recording, link, link_label, okd."""
+    date = opts.get("date", "0000-00-00")
+    date_iso = f"{date}T00:00:00.000Z" if re.match(r"^\d{4}-\d{2}-\d{2}$", date) else date
+    fname = transcript_filename(date, opts.get("presenter", ""), opts.get("title", ""))
     transcript_rel = f"{TRANSCRIPT_DIR}/{fname}"
-    md = transcript_md(segments, title, date, presenter, track, youtube)
-    block = recaps_block(number, title, date, presenter, insights, transcript_rel, track, youtube)
+
+    md = transcript_md(segments, opts.get("title", ""), date_iso, opts.get("presenter", ""),
+                       opts.get("track", ""), opts.get("youtube", ""),
+                       opts.get("episode"), opts.get("thumbnail", ""))
+    entry = recaps_entry(opts, insights, transcript_rel)
 
     bundle = {
-        "recaps_block": block,
+        "recaps_entry": entry,
         "transcript_path": transcript_rel,
         "transcript_md": md,
         "instructions": (
             f"1. Save the transcript to {transcript_rel}\n"
-            f"2. Add the recaps_block to data/recaps.json (the /recordings/{number} page renders from it)\n"
-            f"3. Rebuild the index (scripts/build-recordings-index.mjs); push to Bonfire if desired."
+            f"2. Add the recaps_entry to the top of the 'recaps' array in data/recaps.json\n"
+            f"3. Run: node scripts/build-recordings-index.mjs (regenerates the AI index + JSON-LD)"
         ),
     }
     if out_dir:
         out = Path(out_dir)
         out.mkdir(parents=True, exist_ok=True)
         (out / fname).write_text(md, encoding="utf-8")
-        (out / f"recaps-block-{number}.json").write_text(json.dumps(block, indent=2), encoding="utf-8")
+        n = opts.get("number", 0)
+        (out / f"recaps-entry-{n}.json").write_text(json.dumps(entry, indent=2), encoding="utf-8")
         bundle["output_dir"] = str(out)
-        bundle["files"] = {"transcript": fname, "recaps_block": f"recaps-block-{number}.json"}
+        bundle["files"] = {"transcript": fname, "recaps_entry": f"recaps-entry-{n}.json"}
     return bundle
