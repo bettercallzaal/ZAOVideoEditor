@@ -5,5 +5,6 @@ fastapi==0.115.6
 pydantic==2.10.4
 python-multipart==0.0.20
 pillow==12.1.1
-numpy
-pytest
+requests==2.34.2
+numpy==2.4.6
+pytest==9.1.0
