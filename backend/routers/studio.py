@@ -942,6 +942,15 @@ async def live_transcript(project: str):
     return live_transcribe.get_live_transcript(project_dir)
 
 
+@router.get("/{project}/live/suggested-marks")
+async def live_suggested_marks(project: str):
+    """Suggest clippable moments from the live transcript (host accepts with one tap)."""
+    from ..services import live_transcribe, auto_marks
+    project_dir = _project_dir(project)
+    segs = live_transcribe.get_live_transcript(project_dir).get("segments", [])
+    return {"suggestions": auto_marks.suggest_marks(segs)}
+
+
 @router.get("/page", response_class=HTMLResponse)
 async def page():
     html = STATIC_DIR / "studio.html"
