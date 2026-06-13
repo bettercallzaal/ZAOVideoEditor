@@ -126,6 +126,23 @@
       <span id="picked" class="mut"></span>
     </div>
     <p class="mut mt">Tip: set a <strong>GROQ_API_KEY</strong> (free at console.groq.com) before launch for near-instant transcription of long recordings.</p>
+
+    <div class="panel" id="dayof" style="margin-top:18px">
+      <h2>Day-of casts <span class="mut" style="font-weight:300">- the 15-min warning + live-now posts</span></h2>
+      <div class="row">
+        <select id="dc-session" style="max-width:280px"><option value="">- pick a session (or fill below) -</option></select>
+        <input id="dc-time" type="text" placeholder="time e.g. 5:45pm" style="max-width:140px" />
+        <input id="dc-luma" type="text" placeholder="luma URL (optional)" style="max-width:200px" />
+        <button id="dc-go" class="ghost mini">Generate casts</button>
+      </div>
+      <div class="row mt">
+        <input id="dc-name" type="text" placeholder="name" style="max-width:160px" />
+        <input id="dc-org" type="text" placeholder="org (optional)" style="max-width:140px" />
+        <input id="dc-handle" type="text" placeholder="handle" style="max-width:130px" />
+        <input id="dc-topic" type="text" placeholder="topic" style="max-width:280px" />
+      </div>
+      <div id="dc-out"></div>
+    </div>
   </div>
 
   <div id="progress" class="panel hidden">
@@ -252,6 +269,26 @@ loadLibrary();
 
 let PUB={farcaster:false,x:false,youtube:false};
 fetch("/api/studio/publishers").then(r=>r.json()).then(p=>{PUB=p;}).catch(()=>{});
+
+// --- day-of casts ---
+let SESSIONS=[];
+fetch("/api/studio/sessions").then(r=>r.json()).then(ss=>{
+  SESSIONS=ss||[]; const sel=$("dc-session");
+  SESSIONS.forEach(s=>{ const o=document.createElement("option"); o.value=s.id; o.textContent=`${s.name}${s.org?" - "+s.org:""}${s.status?" ("+s.status+")":""}`; sel.appendChild(o); });
+}).catch(()=>{ const d=$("dayof"); if(d) d.style.display="none"; });
+$("dc-session").onchange=()=>{ const s=SESSIONS.find(x=>x.id===$("dc-session").value); if(!s)return; $("dc-name").value=s.name||""; $("dc-org").value=s.org||""; $("dc-handle").value=s.handle||""; $("dc-topic").value=s.topic||""; if(s.luma) $("dc-luma").value=s.luma; };
+$("dc-go").onclick=async()=>{
+  const body={session_id:$("dc-session").value,name:$("dc-name").value,org:$("dc-org").value,topic:$("dc-topic").value,time:$("dc-time").value,luma:$("dc-luma").value,handle:$("dc-handle").value};
+  try{ const r=await fetch("/api/studio/casts/day-of",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(x=>x.json());
+    if(r.detail) throw new Error(r.detail);
+    const out=$("dc-out"); out.innerHTML="";
+    [["15-minute warning",r.warning],["Live now",r.live_now]].forEach(([lab,txt])=>{
+      const w=document.createElement("div"); w.className="post";
+      w.innerHTML=`<div class="lab">${lab}</div><pre style="white-space:pre-wrap;margin:6px 0;background:none;border:0;padding:0;font-family:Outfit;font-size:14px">${txt.replace(/</g,"&lt;")}</pre>`;
+      const b=document.createElement("button"); b.className="ghost mini"; b.textContent="Copy"; b.onclick=()=>copyText(txt,b); w.appendChild(b); out.appendChild(w);
+    });
+  }catch(e){ $("dc-out").innerHTML=`<p class="mut" style="color:#ff6b35">${e.message}</p>`; }
+};
 async function publish(target,text,btn){
   btn.disabled=true; const o=btn.textContent; btn.textContent="Posting...";
   try{ const r=await fetch(`/api/studio/${project}/publish/${target}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})}).then(x=>x.json());
