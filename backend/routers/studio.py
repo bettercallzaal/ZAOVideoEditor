@@ -758,6 +758,13 @@ async def casts_day_of(body: DayOfCasts):
 # seconds-from-start. After the stream, attach the VOD to the same project and
 # the marks become clip ranges around each moment.
 
+@router.get("/golive")
+async def golive_check(url: str = ""):
+    """Is this channel / stream URL live right now? (never errors)."""
+    from ..services import golive
+    return golive.check_live(url)
+
+
 class LiveStart(BaseModel):
     title: str = ""
 
