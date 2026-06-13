@@ -745,6 +745,22 @@ async def sessions():
     return live_casts.list_sessions()
 
 
+@router.get("/casts/this-week")
+async def casts_this_week(window_days: int = 7):
+    """The "this week at ZABAL Gamez" cast, built from dated confirmed sessions."""
+    from ..services import live_casts
+    today = datetime.now().date().isoformat()
+    cast = live_casts.upcoming_cast(live_casts._leads_raw(), today, window_days=window_days)
+    return {"cast": cast, "today": today}
+
+
+@router.get("/casts/static")
+async def casts_static():
+    """The fixed announce casts (speakers board, builder cast)."""
+    from ..services import live_casts
+    return live_casts.static_casts()
+
+
 class DayOfCasts(BaseModel):
     name: str = ""
     org: str = ""
