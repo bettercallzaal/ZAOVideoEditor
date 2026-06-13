@@ -143,6 +143,39 @@
       </div>
       <div id="dc-out"></div>
     </div>
+
+    <div class="panel" id="livepanel" style="margin-top:18px">
+      <h2>Live session <span class="mut" style="font-weight:300">- mark hot moments while the stream runs</span></h2>
+      <div id="live-idle">
+        <div class="row">
+          <input id="live-title" type="text" placeholder="session title (e.g. Tyler - Magnetiq)" style="max-width:300px" />
+          <button id="live-start" class="ghost mini">Start live session</button>
+        </div>
+        <p class="mut mt">Hit start when the stream goes live. Tap <strong>Mark moment</strong> every time something clippable happens. After the stream, paste the VOD URL and each mark becomes a clip.</p>
+      </div>
+      <div id="live-active" class="hidden">
+        <div class="row">
+          <button id="live-mark" style="font-size:18px;padding:14px 28px">Mark moment</button>
+          <input id="live-note" type="text" placeholder="note (optional) e.g. the drop" style="flex:1" />
+          <span id="live-elapsed" class="mut"></span>
+        </div>
+        <div id="live-markslist" class="mt"></div>
+        <hr style="border:none;border-top:1px solid var(--line);margin:14px 0" />
+        <div class="row">
+          <input id="live-vod" type="url" placeholder="VOD URL (YouTube / Restream / .mp4) after the stream" style="flex:1" />
+          <label class="chk"><input id="live-vodcap" type="checkbox" /> YouTube captions</label>
+          <button id="live-vodgo" class="ghost mini">Attach VOD + process</button>
+        </div>
+        <div class="row mt">
+          <span class="mut">Clip window:</span>
+          <input id="live-pre" type="number" value="20" style="max-width:70px" /> <span class="mut">s before</span>
+          <input id="live-post" type="number" value="40" style="max-width:70px" /> <span class="mut">s after</span>
+          <input id="live-offset" type="number" value="0" style="max-width:70px" /> <span class="mut">s drift</span>
+          <button id="live-clips" class="ghost mini">Make clips from marks</button>
+          <span id="live-clipinfo" class="mut"></span>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="progress" class="panel hidden">
@@ -288,6 +321,67 @@ $("dc-go").onclick=async()=>{
       const b=document.createElement("button"); b.className="ghost mini"; b.textContent="Copy"; b.onclick=()=>copyText(txt,b); w.appendChild(b); out.appendChild(w);
     });
   }catch(e){ $("dc-out").innerHTML=`<p class="mut" style="color:#ff6b35">${e.message}</p>`; }
+};
+
+// --- live clip-marking ---
+let LIVE={project:null,started:0,marks:[]};
+function liveRenderMarks(){
+  const box=$("live-markslist");
+  if(!LIVE.marks.length){ box.innerHTML='<p class="mut">No marks yet. Tap "Mark moment" when something is clippable.</p>'; return; }
+  box.innerHTML="";
+  LIVE.marks.forEach((m,i)=>{
+    const row=document.createElement("div"); row.className="cutrow";
+    row.innerHTML=`<span class="ts num">${fmt(m.at)}</span><span style="flex:1">${(m.note||"Marked moment "+(i+1)).replace(/</g,"&lt;")}</span>`;
+    box.appendChild(row);
+  });
+}
+let liveTimer=null;
+function liveTick(){ if(!LIVE.started){return;} const el=Math.floor(Date.now()/1000-LIVE.started); $("live-elapsed").textContent="Live "+fmt(el); }
+$("live-start").onclick=async()=>{
+  const title=$("live-title").value.trim();
+  try{
+    const r=await fetch("/api/studio/live/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title})}).then(x=>x.json());
+    if(r.detail) throw new Error(r.detail);
+    LIVE={project:r.project,started:r.started_at,marks:[]}; project=r.project;
+    $("live-idle").classList.add("hidden"); $("live-active").classList.remove("hidden");
+    liveRenderMarks(); clearInterval(liveTimer); liveTimer=setInterval(liveTick,1000); liveTick();
+    toast("Live session started");
+  }catch(e){ toast("Error: "+e.message); }
+};
+$("live-mark").onclick=async()=>{
+  if(!LIVE.project)return;
+  const note=$("live-note").value.trim();
+  try{
+    const r=await fetch(`/api/studio/${LIVE.project}/live/mark`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({note})}).then(x=>x.json());
+    if(r.detail) throw new Error(r.detail);
+    LIVE.marks=r.marks; $("live-note").value=""; liveRenderMarks(); toast("Marked at "+fmt(r.mark.at));
+  }catch(e){ toast("Error: "+e.message); }
+};
+$("live-note").onkeydown=(e)=>{ if(e.key==="Enter"){ e.preventDefault(); $("live-mark").click(); } };
+$("live-vodgo").onclick=()=>{
+  const url=$("live-vod").value.trim(); if(!url){ toast("Paste the VOD URL first"); return; }
+  if(!LIVE.project)return;
+  runProcessLiveVod(url,$("live-vodcap").checked);
+};
+async function runProcessLiveVod(url,useCaptions){
+  $("results").classList.add("hidden"); $("progress").classList.remove("hidden"); setProgress(2,"Fetching the VOD...");
+  try{
+    const r=await fetch(`/api/studio/${LIVE.project}/live/vod`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url,use_captions:useCaptions})}).then(x=>x.json());
+    if(r.detail) throw new Error(r.detail);
+    await pollTask(r.task_id,t=>setProgress(t.progress,t.message));
+    project=LIVE.project; await loadEditor(); toast("VOD processed - now make clips from your marks");
+  }catch(e){ setProgress(100,"Error: "+e.message); }
+}
+$("live-clips").onclick=async()=>{
+  if(!LIVE.project)return;
+  const pre=parseFloat($("live-pre").value)||20, post=parseFloat($("live-post").value)||40, offset=parseFloat($("live-offset").value)||0;
+  $("live-clipinfo").textContent="Rendering...";
+  try{
+    const r=await fetch(`/api/studio/${LIVE.project}/clips-from-marks`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pre,post,offset,aspects:"9:16,1:1"})}).then(x=>x.json());
+    if(r.detail) throw new Error(r.detail);
+    if(r.task_id){ await pollTask(r.task_id,t=>$("live-clipinfo").textContent=t.message||""); }
+    $("live-clipinfo").textContent="Clips ready"; project=LIVE.project; if(typeof loadClips==="function") loadClips(); toast("Marked clips rendered");
+  }catch(e){ $("live-clipinfo").textContent="Error: "+e.message; }
 };
 async function publish(target,text,btn){
   btn.disabled=true; const o=btn.textContent; btn.textContent="Posting...";
