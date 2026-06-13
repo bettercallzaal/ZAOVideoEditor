@@ -41,3 +41,26 @@ def test_plan_clips_falls_back_to_keyword_without_llm(monkeypatch):
              "words": []} for i in range(8)]
     plan = rx.plan_clips(segs, use_llm=True)
     assert isinstance(plan, list)
+
+
+def test_loads_zabalgames_list_format(tmp_path):
+    """The team's file uses safe/review as [{from,to,note}] lists."""
+    p = tmp_path / "corr.json"
+    p.write_text(json.dumps({
+        "safe": [{"from": "Zibal", "to": "$Zabal"}, {"from": "Saval", "to": "Zabal"}],
+        "review": [{"from": "Games", "to": "Gamez", "note": "brand vs video games"}],
+    }))
+    c = glossary.load_corrections(p)
+    assert c["safe"]["zibal"] == "$Zabal"
+    assert c["review"][0]["term"] == "Games"
+    out, _ = glossary.apply_safe_corrections("we love Zibal and Saval", c)
+    assert "$Zabal" in out and "Zabal" in out
+
+
+def test_add_correction_preserves_list_format(tmp_path):
+    p = tmp_path / "corr.json"
+    p.write_text(json.dumps({"safe": [{"from": "Zibal", "to": "$Zabal"}], "review": []}))
+    glossary.add_safe_correction("Steelo", "Stilo", path=p)
+    raw = json.loads(p.read_text())
+    assert isinstance(raw["safe"], list)  # stays in their format
+    assert any(r["from"] == "Steelo" and r["to"] == "Stilo" for r in raw["safe"])

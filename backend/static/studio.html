@@ -477,7 +477,7 @@ $("zg-export").onclick=async()=>{
     const r=await fetch(`/api/studio/${project}/zabal-export`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(x=>x.json());
     if(r.detail) throw new Error(r.detail);
     $("zg-info").textContent="";
-    const blockJson=JSON.stringify(r.recaps_block,null,2);
+    const blockJson=JSON.stringify(r.recaps_entry,null,2);
     $("zg-out").innerHTML=`<div class="lab" style="font-family:Syne;font-size:11px;color:#6a6a74;text-transform:uppercase;margin-top:10px">recaps.json block (paste into data/recaps.json)</div>`;
     const pre=document.createElement("pre"); pre.textContent=blockJson; pre.style.maxHeight="240px"; pre.style.overflow="auto"; $("zg-out").appendChild(pre);
     const cb=document.createElement("button"); cb.className="ghost mini"; cb.textContent="Copy recaps block"; cb.onclick=()=>copyText(blockJson,cb); $("zg-out").appendChild(cb);

@@ -654,22 +654,26 @@ async def push_bonfire(project: str):
 class ZabalExport(BaseModel):
     number: int = 0
     presenter: str = ""
-    track: str = ""
+    handle: str = ""
+    org: str = ""
+    track: str = "builder"
+    type: str = "workshop"
     youtube: str = ""
+    episode: int = 0
 
 
 @router.post("/{project}/zabal-export")
 async def zabal_export(project: str, body: ZabalExport):
-    """Emit the ZABAL Gamez repo formats: a recaps.json block + the transcript .md.
+    """Emit the ZABAL Gamez repo formats: a data/recaps.json entry + transcript .md.
 
-    Requires that key moments were extracted (the recap/chapters drive the block).
+    Requires that key moments were extracted (the recap/chapters drive the entry).
     """
     project_dir = _project_dir(project)
     from ..services import zabalgames_export as zx
     segments = _load_segments(project_dir)
     insights_file = project_dir / "metadata" / "insights.json"
     if not insights_file.exists():
-        raise HTTPException(400, "Extract key moments first - the recap drives the recaps block")
+        raise HTTPException(400, "Extract key moments first - the recap drives the recaps entry")
     insights = json.loads(insights_file.read_text())
 
     title = _project_title(project_dir)
@@ -681,12 +685,13 @@ async def zabal_export(project: str, body: ZabalExport):
         except (ValueError, OSError):
             pass
 
-    bundle = zx.build_export(
-        number=body.number, title=title, date=date or "0000-00-00",
-        presenter=body.presenter or title, segments=segments, insights=insights,
-        track=body.track, youtube=body.youtube, out_dir=project_dir / "zabal",
-    )
-    return bundle
+    opts = {
+        "title": title, "date": date or "0000-00-00",
+        "presenter": body.presenter or title, "handle": body.handle, "org": body.org,
+        "track": body.track, "type": body.type, "youtube": body.youtube,
+        "number": body.number, "episode": body.episode or None,
+    }
+    return zx.build_export(opts, segments, insights, out_dir=project_dir / "zabal")
 
 
 @router.get("/page", response_class=HTMLResponse)

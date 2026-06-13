@@ -26,12 +26,33 @@ CORRECTIONS_PATH = Path(
 
 
 def load_corrections(path: Optional[Path] = None) -> dict:
+    """Load corrections, normalizing the two on-disk shapes into one internal form.
+
+    Internal form: {"safe": {wrong_lower: right}, "review": [{term, to, note}]}.
+    Supports BOTH:
+      - the bundled seed: safe = {wrong: right} dict
+      - the zabalgames canonical file: safe/review = [{from, to, note}] lists
+    so STUDIO_GLOSSARY_PATH can point straight at the team's file.
+    """
     p = path or CORRECTIONS_PATH
     if not p.exists():
         return {"safe": {}, "review": []}
     with open(p) as f:
         data = json.load(f)
-    return {"safe": data.get("safe", {}), "review": data.get("review", [])}
+
+    raw_safe = data.get("safe", {})
+    if isinstance(raw_safe, list):  # zabalgames {from,to} list format
+        safe = {r["from"].lower(): r["to"] for r in raw_safe if r.get("from") and r.get("to")}
+    else:
+        safe = {k.lower(): v for k, v in raw_safe.items()}
+
+    review = []
+    for r in data.get("review", []):
+        if isinstance(r, dict):
+            term = r.get("term") or r.get("from")
+            if term:
+                review.append({"term": term, "to": r.get("to"), "note": r.get("note", "")})
+    return {"safe": safe, "review": review}
 
 
 def _whole_word_pattern(term: str) -> re.Pattern:
@@ -189,10 +210,21 @@ def add_safe_correction(wrong: str, right: str, path: Optional[Path] = None) -> 
     if p.exists():
         with open(p) as f:
             data = json.load(f)
-    data.setdefault("safe", {})[wrong.lower()] = right
+    safe = data.setdefault("safe", {})
+    if isinstance(safe, list):
+        # zabalgames {from,to} list format - update in place or append, stays
+        # compatible with their scripts/fix-transcript.mjs.
+        for r in safe:
+            if r.get("from", "").lower() == wrong.lower():
+                r["to"] = right
+                break
+        else:
+            safe.append({"from": wrong, "to": right})
+    else:
+        safe[wrong.lower()] = right
     with open(p, "w") as f:
         json.dump(data, f, indent=2)
-    return {"safe": data.get("safe", {}), "review": data.get("review", [])}
+    return load_corrections(p)
 
 
 def correct_transcript_text(text: str, corrections: Optional[dict] = None,

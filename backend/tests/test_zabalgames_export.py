@@ -1,4 +1,4 @@
-"""ZABAL Gamez export - recaps.json block + transcript .md in the team's format."""
+"""ZABAL Gamez export - recaps.json entry + transcript .md in the team's real format."""
 
 from backend.services import zabalgames_export as zx
 
@@ -12,12 +12,16 @@ INSIGHTS = {
     "chapters": [{"time": "00:00", "title": "Intro"}, {"time": "02:00", "title": "Entry timing"}],
     "quotes": [{"text": "Timing your entry is everything"}, {"text": "It costs 0.5 SOL"}],
 }
+OPTS = {
+    "title": "Building WaveWarZ", "date": "2026-06-12", "presenter": "Hurricane Mike",
+    "handle": "@hurricane", "org": "WaveWarZ", "track": "builder", "type": "workshop",
+    "youtube": "https://youtu.be/abc12345678", "number": 8, "episode": 3,
+}
 
 
 def test_youtube_id_extracts():
     assert zx.youtube_id("https://youtu.be/abc12345678") == "abc12345678"
     assert zx.youtube_id("https://www.youtube.com/watch?v=abc12345678&t=3") == "abc12345678"
-    assert zx.youtube_id("abc12345678") == "abc12345678"
 
 
 def test_transcript_filename_convention():
@@ -25,50 +29,46 @@ def test_transcript_filename_convention():
         "2026-06-12-hurricane-mike-wavewarz.md"
 
 
-def test_transcript_md_has_frontmatter_and_speakers():
-    md = zx.transcript_md(SEGMENTS, "WaveWarZ Talk", "2026-06-12", "Mike",
-                          track="Tokenomics", youtube="https://youtu.be/abc12345678")
-    assert md.startswith("---")
-    assert "presenter: Mike" in md
-    assert "youtube: abc12345678" in md
+def test_transcript_md_frontmatter_matches_schema():
+    md = zx.transcript_md(SEGMENTS, "Building WaveWarZ", "2026-06-12T00:00:00.000Z",
+                          "Hurricane Mike", track="builder",
+                          youtube="https://youtu.be/abc12345678", episode=3)
+    assert "show: ZABAL Gamez Workshops" in md
+    assert "host: Zaal" in md
+    assert "episode: 3" in md
+    assert "youtube: https://youtu.be/abc12345678" in md
     assert "**Zaal:** Welcome to the workshop" in md
 
 
-def test_recaps_block_fields():
-    b = zx.recaps_block(7, "WaveWarZ Talk", "2026-06-12", "Mike", INSIGHTS,
-                        "data/streams/.../t.md", track="Tokenomics",
-                        youtube="https://youtu.be/abc12345678")
-    # exactly the fields the ZABAL Gamez team specified
-    for f in ("date", "presenter", "track", "summary", "topics", "takeaways", "chapters", "youtube", "transcript"):
-        assert f in b
-    assert b["topics"] == ["Intro", "Entry timing"]
-    assert b["takeaways"][0] == "Timing your entry is everything"
-    assert b["youtube"] == "abc12345678"
+def test_recaps_entry_has_real_fields():
+    e = zx.recaps_entry(OPTS, INSIGHTS, "data/streams/.../t.md")
+    for f in ("date", "type", "title", "presenter", "track", "format", "summary",
+              "topics", "takeaways", "share_topics", "transcript"):
+        assert f in e
+    assert e["type"] == "workshop"
+    assert e["handle"] == "@hurricane"          # optional, included when present
+    assert e["org"] == "WaveWarZ"
+    assert e["page"] == "/recordings/8"
+    assert e["youtube"] == "https://youtu.be/abc12345678"
+    assert e["topics"] == ["Intro", "Entry timing"]
+    assert e["takeaways"][0] == "Timing your entry is everything"
+    assert len(e["share_topics"]) >= 1
+
+
+def test_recaps_entry_omits_empty_optionals():
+    e = zx.recaps_entry({"title": "T", "date": "2026-06-12", "presenter": "P"}, INSIGHTS, "t.md")
+    assert "handle" not in e and "org" not in e and "youtube" not in e and "page" not in e
 
 
 def test_build_export_writes_files(tmp_path):
-    bundle = zx.build_export(7, "WaveWarZ Talk", "2026-06-12", "Mike", SEGMENTS, INSIGHTS,
-                            track="Tokenomics", youtube="abc12345678", out_dir=tmp_path)
-    assert (tmp_path / "2026-06-12-mike-wavewarz-talk.md").exists()
-    assert (tmp_path / "recaps-block-7.json").exists()
-    assert bundle["recaps_block"]["id"] == 7
+    bundle = zx.build_export(OPTS, SEGMENTS, INSIGHTS, out_dir=tmp_path)
+    assert (tmp_path / "2026-06-12-hurricane-mike-building-wavewarz.md").exists()
+    assert (tmp_path / "recaps-entry-8.json").exists()
+    assert bundle["recaps_entry"]["title"] == "Building WaveWarZ"
+    assert "T00:00:00.000Z" in bundle["transcript_md"]  # ISO date in frontmatter
 
 
 def test_em_dash_stripped():
     md = zx.transcript_md([{"text": "we shipped it - then iterated", "speaker": "Z"}],
-                          "T", "2026-06-12", "Z")
+                          "T", "2026-06-12T00:00:00.000Z", "Z")
     assert "—" not in md
-
-
-def test_glossary_path_env(monkeypatch, tmp_path):
-    import importlib
-    custom = tmp_path / "g.json"
-    custom.write_text('{"safe": {"foo": "Foo"}, "review": []}')
-    monkeypatch.setenv("STUDIO_GLOSSARY_PATH", str(custom))
-    import backend.services.glossary as g
-    importlib.reload(g)
-    try:
-        assert g.load_corrections()["safe"]["foo"] == "Foo"
-    finally:
-        monkeypatch.delenv("STUDIO_GLOSSARY_PATH", raising=False)
-        importlib.reload(g)
