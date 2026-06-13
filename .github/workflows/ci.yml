@@ -41,3 +41,18 @@ jobs:
         continue-on-error: true
       - name: Build
         run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the production image
+        run: docker build -t zao-recordings-studio .
+      - name: Smoke-test the container (health endpoint)
+        run: |
+          docker run -d --name studio -p 8000:8000 zao-recordings-studio
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:8000/api/health && break || sleep 2
+          done
+          curl -fsS http://localhost:8000/api/health
+          docker rm -f studio
