@@ -146,6 +146,12 @@
         <input id="dc-topic" type="text" placeholder="topic" style="max-width:280px" />
       </div>
       <div id="dc-out"></div>
+      <div class="row mt">
+        <button id="dc-thisweek" class="ghost mini">This-week cast</button>
+        <button id="dc-static" class="ghost mini">Announce casts</button>
+        <span class="mut">from the ZABAL Gamez schedule</span>
+      </div>
+      <div id="dc-extra"></div>
     </div>
 
     <div class="panel" id="livepanel" style="margin-top:18px">
@@ -381,6 +387,28 @@ $("dc-go").onclick=async()=>{
       const b=document.createElement("button"); b.className="ghost mini"; b.textContent="Copy"; b.onclick=()=>copyText(txt,b); w.appendChild(b); out.appendChild(w);
     });
   }catch(e){ $("dc-out").innerHTML=`<p class="mut" style="color:#ff6b35">${e.message}</p>`; }
+};
+function renderCopyPosts(box,pairs){
+  box.innerHTML="";
+  pairs.forEach(([lab,txt])=>{
+    if(!txt) return;
+    const w=document.createElement("div"); w.className="post";
+    w.innerHTML=`<div class="lab">${lab}</div><pre style="white-space:pre-wrap;margin:6px 0;background:none;border:0;padding:0;font-family:Outfit;font-size:14px">${txt.replace(/</g,"&lt;")}</pre>`;
+    const b=document.createElement("button"); b.className="ghost mini"; b.textContent="Copy"; b.onclick=()=>copyText(txt,b); w.appendChild(b); box.appendChild(w);
+  });
+}
+$("dc-thisweek").onclick=async()=>{
+  try{
+    const r=await fetch("/api/studio/casts/this-week").then(x=>x.json());
+    if(!r.cast){ $("dc-extra").innerHTML='<p class="mut mt">No dated, confirmed sessions in the next 7 days.</p>'; return; }
+    renderCopyPosts($("dc-extra"),[["This week",r.cast]]);
+  }catch(e){ $("dc-extra").innerHTML=`<p class="mut mt" style="color:#ff6b35">${e.message}</p>`; }
+};
+$("dc-static").onclick=async()=>{
+  try{
+    const r=await fetch("/api/studio/casts/static").then(x=>x.json());
+    renderCopyPosts($("dc-extra"),[["Speakers board",r.speakers],["What we built",r.builder]]);
+  }catch(e){ $("dc-extra").innerHTML=`<p class="mut mt" style="color:#ff6b35">${e.message}</p>`; }
 };
 
 // --- live clip-marking ---
