@@ -276,41 +276,61 @@ def _burn_captions_pillow(video_path: str, ass_path: str, output_path: str,
     if on_progress:
         on_progress(15, f"Rendering {len(caption_images)} caption overlays...")
 
-    tl_idx = 0  # current position in timeline
+    def _frames():
+        tl_idx = 0  # current position in timeline
+        for frame_num in range(total_frames):
+            t = frame_num / fps
+            while tl_idx < len(timeline) and timeline[tl_idx][1] < t:
+                tl_idx += 1
+            active_key = None
+            for j in range(tl_idx, len(timeline)):
+                start, end, key = timeline[j]
+                if start > t:
+                    break
+                if start <= t <= end:
+                    active_key = key
+                    break
+            yield caption_images[active_key].tobytes() if (active_key and active_key in caption_images) else blank_raw
+
+    pipe_broke = _write_overlay_frames(proc, _frames(), total_frames, on_progress)
+    _finish_overlay_pipe(proc, pipe_broke)
+
+
+def _write_overlay_frames(proc, frames, total_frames=0, on_progress=None) -> bool:
+    """Feed raw RGBA overlay frames to ffmpeg's stdin.
+
+    ffmpeg can exit early (its own error, or -shortest reaching the audio end),
+    which closes the pipe mid-write. We stop feeding rather than crash on
+    BrokenPipeError, and let the caller inspect the exit code. Returns True if
+    the pipe broke before all frames were written.
+    """
     last_pct = 0
-    for frame_num in range(total_frames):
-        t = frame_num / fps
-
-        # Find which caption image (if any) is active at time t
-        # Advance tl_idx past expired entries
-        while tl_idx < len(timeline) and timeline[tl_idx][1] < t:
-            tl_idx += 1
-
-        active_key = None
-        for j in range(tl_idx, len(timeline)):
-            start, end, key = timeline[j]
-            if start > t:
-                break
-            if start <= t <= end:
-                active_key = key
-                break
-
-        if active_key and active_key in caption_images:
-            proc.stdin.write(caption_images[active_key].tobytes())
-        else:
-            proc.stdin.write(blank_raw)
-
-        # Report progress every ~5%
+    for i, frame in enumerate(frames):
+        try:
+            proc.stdin.write(frame)
+        except (BrokenPipeError, OSError):
+            return True
         if on_progress and total_frames > 0:
-            pct = 15 + int(80 * frame_num / total_frames)
+            pct = 15 + int(80 * i / total_frames)
             if pct >= last_pct + 5:
                 last_pct = pct
                 on_progress(pct, f"Burning captions... {pct}%")
+    return False
 
-    proc.stdin.close()
+
+def _finish_overlay_pipe(proc, pipe_broke: bool):
+    """Close the pipe and wait; raise only if ffmpeg actually failed.
+
+    An early pipe close with exit code 0 (e.g. -shortest) is a valid output.
+    """
+    try:
+        proc.stdin.close()
+    except (BrokenPipeError, OSError):
+        pass
     _, stderr = proc.communicate()
     if proc.returncode != 0:
-        raise RuntimeError(f"ffmpeg caption burn failed: {stderr.decode()}")
+        msg = stderr.decode(errors="replace") if stderr else ""
+        raise RuntimeError(f"ffmpeg caption burn failed: {msg}")
 
 
 def _render_caption_image(width, height, font, text,
