@@ -169,6 +169,8 @@
           <span id="live-capinfo" class="mut">Captures audio in 15s clips and transcribes as you go (Groq if a key is set, else local).</span>
         </div>
         <div id="live-transcript" class="transcript" style="max-height:200px;margin-top:8px"></div>
+        <div class="row mt"><span class="mut">Suggested moments</span><button id="live-suggest" class="ghost mini">Refresh suggestions</button></div>
+        <div id="live-suggestions"></div>
         <hr style="border:none;border-top:1px solid var(--line);margin:14px 0" />
         <div class="row">
           <input id="live-vod" type="url" placeholder="VOD URL (YouTube / Restream / .mp4) after the stream" style="flex:1" />
@@ -430,7 +432,7 @@ async function captureClip(){
     const fd=new FormData(); fd.append("audio",blob,"chunk.webm"); fd.append("offset",String(offset)); fd.append("quality","fast");
     try{
       const r=await fetch(`/api/studio/${LIVE.project}/live/audio-chunk`,{method:"POST",body:fd}).then(x=>x.json());
-      if(r.added&&r.added.length){ liveAppendTranscript(r.added); }
+      if(r.added&&r.added.length){ liveAppendTranscript(r.added); loadSuggestions(); }
     }catch(_){}
   };
   rec.start();
@@ -457,6 +459,26 @@ $("live-capture").onclick=async()=>{
     captureClip();
   }catch(e){ $("live-capinfo").textContent="Could not capture audio: "+e.message; }
 };
+
+// Auto-mark suggestions from the live transcript - host accepts with one tap.
+async function loadSuggestions(){
+  if(!LIVE.project)return;
+  try{
+    const r=await fetch(`/api/studio/${LIVE.project}/live/suggested-marks`).then(x=>x.json());
+    const box=$("live-suggestions"); const s=r.suggestions||[];
+    if(!s.length){ box.innerHTML='<p class="mut">No suggestions yet - they appear as the live transcript fills in.</p>'; return; }
+    box.innerHTML="";
+    s.forEach(m=>{
+      const row=document.createElement("div"); row.className="cutrow";
+      row.innerHTML=`<span class="ts num">${fmt(m.at)}</span><span class="tag">${m.reason}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(m.note||"").replace(/</g,"&lt;")}</span>`;
+      const b=document.createElement("button"); b.className="ghost mini"; b.textContent="Add"; b.style.marginLeft="auto";
+      b.onclick=async()=>{ b.disabled=true; b.textContent="Added";
+        try{ const rr=await fetch(`/api/studio/${LIVE.project}/live/mark`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({note:m.note,at:m.at})}).then(x=>x.json()); LIVE.marks=rr.marks; liveRenderMarks(); }catch(_){ b.disabled=false; b.textContent="Add"; } };
+      row.appendChild(b); box.appendChild(row);
+    });
+  }catch(e){ $("live-suggestions").innerHTML=`<p class="mut" style="color:#ff6b35">${e.message}</p>`; }
+}
+$("live-suggest").onclick=loadSuggestions;
 async function publish(target,text,btn){
   btn.disabled=true; const o=btn.textContent; btn.textContent="Posting...";
   try{ const r=await fetch(`/api/studio/${project}/publish/${target}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})}).then(x=>x.json());
