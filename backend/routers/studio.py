@@ -901,6 +901,39 @@ async def clips_from_marks(project: str, body: ClipsFromMarks):
     return {"task_id": task_id}
 
 
+# --- Live real-time transcription ---------------------------------------
+# The browser records the stream's audio in short self-contained clips and
+# POSTs them one at a time; each is transcribed, rebased to its offset, brand-
+# corrected, and appended to a rolling live transcript.
+
+@router.post("/{project}/live/audio-chunk")
+async def live_audio_chunk(project: str, audio: UploadFile = File(...),
+                           offset: float = Form(0.0), quality: str = Form("fast")):
+    """Transcribe one audio clip and append it to the live transcript."""
+    from ..services import live_transcribe
+    project_dir = _project_dir(project)
+    if not project_dir.exists():
+        raise HTTPException(404, "Project not found")
+    chunks = project_dir / "live_chunks"
+    chunks.mkdir(parents=True, exist_ok=True)
+    ext = Path(audio.filename or "chunk.webm").suffix.lower() or ".webm"
+    dest = chunks / f"chunk_{int(offset)}{ext}"
+    await _save_upload(audio, dest)
+    try:
+        res = live_transcribe.append_chunk(project_dir, str(dest), offset=offset, quality=quality)
+    except Exception as e:
+        raise HTTPException(500, f"Transcription failed: {e}")
+    return res
+
+
+@router.get("/{project}/live/transcript")
+async def live_transcript(project: str):
+    """The rolling live transcript accumulated from chunks."""
+    from ..services import live_transcribe
+    project_dir = _project_dir(project)
+    return live_transcribe.get_live_transcript(project_dir)
+
+
 @router.get("/page", response_class=HTMLResponse)
 async def page():
     html = STATIC_DIR / "studio.html"

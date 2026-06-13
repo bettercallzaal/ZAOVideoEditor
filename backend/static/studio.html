@@ -160,6 +160,11 @@
           <span id="live-elapsed" class="mut"></span>
         </div>
         <div id="live-markslist" class="mt"></div>
+        <div class="row mt">
+          <button id="live-capture" class="ghost mini">Start live transcript</button>
+          <span id="live-capinfo" class="mut">Captures audio in 15s clips and transcribes as you go (Groq if a key is set, else local).</span>
+        </div>
+        <div id="live-transcript" class="transcript" style="max-height:200px;margin-top:8px"></div>
         <hr style="border:none;border-top:1px solid var(--line);margin:14px 0" />
         <div class="row">
           <input id="live-vod" type="url" placeholder="VOD URL (YouTube / Restream / .mp4) after the stream" style="flex:1" />
@@ -382,6 +387,50 @@ $("live-clips").onclick=async()=>{
     if(r.task_id){ await pollTask(r.task_id,t=>$("live-clipinfo").textContent=t.message||""); }
     $("live-clipinfo").textContent="Clips ready"; project=LIVE.project; if(typeof loadClips==="function") loadClips(); toast("Marked clips rendered");
   }catch(e){ $("live-clipinfo").textContent="Error: "+e.message; }
+};
+
+// Live transcript: a fresh MediaRecorder per clip so each chunk is a standalone
+// file (a single continuous recorder produces fragmented webm the server can't decode).
+let CAP={on:false,stream:null,timer:null};
+const CLIP_MS=15000;
+async function captureClip(){
+  if(!CAP.on||!CAP.stream)return;
+  const offset=Math.max(0,Math.floor(Date.now()/1000-LIVE.started));
+  const rec=new MediaRecorder(CAP.stream,{mimeType:MediaRecorder.isTypeSupported("audio/webm")?"audio/webm":""});
+  const parts=[];
+  rec.ondataavailable=e=>{ if(e.data&&e.data.size)parts.push(e.data); };
+  rec.onstop=async()=>{
+    if(!parts.length)return;
+    const blob=new Blob(parts,{type:"audio/webm"});
+    const fd=new FormData(); fd.append("audio",blob,"chunk.webm"); fd.append("offset",String(offset)); fd.append("quality","fast");
+    try{
+      const r=await fetch(`/api/studio/${LIVE.project}/live/audio-chunk`,{method:"POST",body:fd}).then(x=>x.json());
+      if(r.added&&r.added.length){ liveAppendTranscript(r.added); }
+    }catch(_){}
+  };
+  rec.start();
+  setTimeout(()=>{ if(rec.state!=="inactive")rec.stop(); if(CAP.on)CAP.timer=setTimeout(captureClip,200); },CLIP_MS);
+}
+function liveAppendTranscript(segs){
+  const box=$("live-transcript");
+  segs.forEach(s=>{ const d=document.createElement("div"); d.className="seg";
+    d.innerHTML=`<span class="ts">${fmt(s.start)}</span> ${(s.text||"").replace(/</g,"&lt;")}`; box.appendChild(d); });
+  box.scrollTop=box.scrollHeight;
+}
+$("live-capture").onclick=async()=>{
+  if(CAP.on){ // stop
+    CAP.on=false; clearTimeout(CAP.timer); if(CAP.stream)CAP.stream.getTracks().forEach(t=>t.stop()); CAP.stream=null;
+    $("live-capture").textContent="Start live transcript"; $("live-capinfo").textContent="Stopped."; return;
+  }
+  try{
+    // Prefer tab/stream audio (share the tab playing the stream); fall back to mic.
+    let stream;
+    try{ stream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true}); if(!stream.getAudioTracks().length) throw new Error("no audio track shared"); }
+    catch(_){ stream=await navigator.mediaDevices.getUserMedia({audio:true}); }
+    CAP.on=true; CAP.stream=stream;
+    $("live-capture").textContent="Stop live transcript"; $("live-capinfo").textContent="Listening... clips transcribe every 15s.";
+    captureClip();
+  }catch(e){ $("live-capinfo").textContent="Could not capture audio: "+e.message; }
 };
 async function publish(target,text,btn){
   btn.disabled=true; const o=btn.textContent; btn.textContent="Posting...";
