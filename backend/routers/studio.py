@@ -745,6 +745,162 @@ async def casts_day_of(body: DayOfCasts):
     return live_casts.day_of_casts(name, org, topic, body.time, luma, handle)
 
 
+# --- Live clip-marking ---------------------------------------------------
+# Mark hot moments while the stream is running; each mark stores its
+# seconds-from-start. After the stream, attach the VOD to the same project and
+# the marks become clip ranges around each moment.
+
+class LiveStart(BaseModel):
+    title: str = ""
+
+
+@router.post("/live/start")
+async def live_start(body: LiveStart):
+    """Start a live session: create a project and stamp the wall-clock start."""
+    from ..services import live_marks
+    import time as _t
+    disp = (body.title or "live session").strip() or "live session"
+    name = _slug(disp)
+    project_dir = _make_project(name, disp, "studio-live")
+    state = live_marks.start_session(project_dir, started_at=_t.time())
+    return {"project": name, "started_at": state["started_at"], "marks": []}
+
+
+class LiveMark(BaseModel):
+    note: str = ""
+    at: float | None = None
+
+
+@router.post("/{project}/live/mark")
+async def live_mark(project: str, body: LiveMark):
+    """Mark a hot moment. Uses server time unless `at` (seconds-from-start) is given."""
+    from ..services import live_marks
+    import time as _t
+    project_dir = _project_dir(project)
+    if not project_dir.exists():
+        raise HTTPException(404, "Project not found")
+    mark = live_marks.add_mark(project_dir, note=body.note, now=_t.time(), at=body.at)
+    state = live_marks.get_state(project_dir)
+    return {"mark": mark, "count": len(state["marks"]), "marks": state["marks"]}
+
+
+@router.get("/{project}/marks")
+async def live_marks_list(project: str):
+    """The marks recorded for a project."""
+    from ..services import live_marks
+    project_dir = _project_dir(project)
+    state = live_marks.get_state(project_dir)
+    return {"started_at": state.get("started_at"), "marks": state.get("marks", []),
+            "count": len(state.get("marks", []))}
+
+
+def _do_live_vod(task_id: str, project_dir: Path, url: str, title: str,
+                 quality: str, use_captions: bool):
+    """Pull the VOD into an EXISTING live project, then run the pipeline."""
+    from ..services import ingest_service
+    tm.update_task(task_id, progress=2, message="Fetching the VOD...")
+    ingest_service.download_to_project(
+        url, project_dir,
+        on_progress=lambda pct, msg: tm.update_task(task_id, progress=min(int(pct * 0.4), 40), message=msg),
+    )
+    media = _find_input(project_dir)
+    cap = url if (use_captions and ("youtube.com" in url or "youtu.be" in url)) else ""
+    return _do_process(task_id, project_dir, str(media), title, False, quality, captions_url=cap)
+
+
+class LiveVod(BaseModel):
+    url: str
+    quality: str = "fast"
+    use_captions: bool = False
+
+
+@router.post("/{project}/live/vod")
+async def live_vod(project: str, body: LiveVod):
+    """Attach the recorded VOD to a live project and process it (so marks can become clips)."""
+    from ..services import ingest_service
+    project_dir = _project_dir(project)
+    if not project_dir.exists():
+        raise HTTPException(404, "Project not found")
+    if not ingest_service.yt_dlp_available():
+        raise HTTPException(400, "yt-dlp is not installed - run: pip install yt-dlp")
+    if not (body.url.startswith("http://") or body.url.startswith("https://")):
+        raise HTTPException(422, "Provide a valid http(s) URL")
+    title = project_dir.name
+    pj = project_dir / "project.json"
+    if pj.exists():
+        try:
+            title = json.loads(pj.read_text()).get("title", title)
+        except (ValueError, OSError):
+            pass
+    task_id = tm.create_task(project, "studio_process")
+    tm.run_in_background(task_id, _do_live_vod, project_dir, body.url, title,
+                         body.quality, body.use_captions)
+    return {"task_id": task_id}
+
+
+def _master_duration(master: Path) -> float:
+    try:
+        from ..services.ffmpeg_service import get_video_info
+        info = get_video_info(str(master))
+        return float(info.get("format", {}).get("duration", 0) or 0)
+    except Exception:
+        return 0.0
+
+
+def _do_clips_from_marks(task_id: str, project_dir: Path, pre: float, post: float,
+                         offset: float, aspects: list):
+    from ..services import recordings_export as rx
+    from ..services import live_marks
+    state = live_marks.get_state(project_dir)
+    marks = state.get("marks", [])
+    master = project_dir / "processing" / "trimmed.mp4"
+    if not master.exists():
+        master = Path(_find_input(project_dir))
+    tm.update_task(task_id, progress=10, message="Turning marks into clip ranges...")
+    duration = _master_duration(master)
+    highlights = live_marks.marks_to_highlights(marks, duration, pre=pre, post=post, offset=offset)
+    if not highlights:
+        return {"rendered": False, "reason": "No marks to clip", "plan": []}
+    try:
+        segments = _load_segments(project_dir)
+    except HTTPException:
+        segments = []
+    tm.update_task(task_id, progress=25, message=f"Rendering {len(highlights)} marked clips...")
+    res = rx.render_clips(
+        str(master), segments, project_dir / "clips",
+        highlights=highlights, aspects=aspects, project_name=project_dir.name,
+    )
+    tm.update_task(task_id, progress=95, message="Marked clips ready")
+    return res
+
+
+class ClipsFromMarks(BaseModel):
+    pre: float = 20.0
+    post: float = 40.0
+    offset: float = 0.0
+    aspects: str = "9:16"
+
+
+@router.post("/{project}/clips-from-marks")
+async def clips_from_marks(project: str, body: ClipsFromMarks):
+    """Render a clip around each live mark, in the requested aspect ratios."""
+    project_dir = _project_dir(project)
+    if not project_dir.exists():
+        raise HTTPException(404, "Project not found")
+    try:
+        _find_input(project_dir)
+    except HTTPException:
+        raise HTTPException(409, "No VOD attached yet - POST the recording to /live/vod first")
+    asp = [a.strip() for a in body.aspects.split(",") if a.strip()] or ["9:16"]
+    existing = tm.get_active_task(project, "studio_clips")
+    if existing:
+        return tm.task_to_dict(existing)
+    task_id = tm.create_task(project, "studio_clips")
+    tm.run_in_background(task_id, _do_clips_from_marks, project_dir,
+                         body.pre, body.post, body.offset, asp)
+    return {"task_id": task_id}
+
+
 @router.get("/page", response_class=HTMLResponse)
 async def page():
     html = STATIC_DIR / "studio.html"
