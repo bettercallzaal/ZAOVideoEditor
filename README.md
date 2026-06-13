@@ -63,6 +63,51 @@ process a recording and grab the outputs to post manually.
 
 ---
 
+## Livestream day (during the live)
+
+The Studio also helps while a stream is actually running, then bridges straight
+into the clip pipeline once the VOD exists. All of it lives in the **Live session**
+panel on the intake screen.
+
+- **Day-of casts** - the 15-minute-warning and "live now" posts for a session, in
+  the team's exact templates, filled from the schedule. Pick a session (or type the
+  details), get both casts brand-clean and ready to copy.
+- **Live clip-marking** - start a live session, then tap **Mark moment** (with an
+  optional note) every time something is clippable. Each mark stores its
+  seconds-from-start. After the stream, paste the VOD URL: it downloads and processes
+  into the same project, and **Make clips from marks** turns every mark into a clip -
+  a window of `[mark - pre]` to `[mark + post]` (defaults 20s / 40s), clamped to the
+  video, with an offset knob for drift between when you hit start and the VOD's t=0.
+  Renders 9:16 + 1:1 through the same captioned clip pipeline.
+- **Live transcript** - **Start live transcript** captures the stream's audio in 15s
+  clips (share the tab playing the stream, or fall back to the mic) and transcribes
+  each on the fast path as you go, so the words scroll by while you mark. Same Groq /
+  local routing and brand glossary as the main pipeline.
+
+The flow: start the session and the live transcript -> mark moments live -> after the
+stream, attach the VOD -> make clips from your marks -> the clips, copy, and recap
+flow through the normal editor.
+
+---
+
+## ZABAL Gamez export
+
+For the ZABAL Gamez workshop series, the Studio outputs directly into the team's repo
+formats instead of a hand-built page:
+
+- a `recaps.json` block (date, presenter, track, summary, topics, takeaways, chapters,
+  youtube, transcript) and a transcript `.md` with the right frontmatter,
+- written straight into a local checkout of the
+  [ZAODEVZ/zabalgames](https://github.com/zaoDEVZ/zabalgames) repo when
+  `STUDIO_ZABALGAMES_PATH` is set (no auto-push - you review the `git diff`),
+- using the team's own `data/transcript-corrections.json` glossary when
+  `STUDIO_GLOSSARY_PATH` points at it.
+
+YouTube VODs from Restream are the canonical source; the **Use YouTube captions** toggle
+pulls the VOD's own captions (a 26-minute talk in ~3s) and skips Whisper entirely.
+
+---
+
 ## Optional integrations (all degrade gracefully)
 
 | Set this | To enable |
@@ -74,9 +119,14 @@ process a recording and grab the outputs to post manually.
 | `NEYNAR_API_KEY` + `FARCASTER_SIGNER_UUID` | Post to Farcaster |
 | `X_API_KEY/SECRET` + `X_ACCESS_TOKEN/SECRET` (+ `pip install requests-oauthlib`) | Post to X |
 | `backend/credentials.json` + `python scripts/youtube_auth.py` | Upload to YouTube |
+| `STUDIO_ZABALGAMES_PATH` | Write the export into a local zabalgames checkout |
+| `STUDIO_GLOSSARY_PATH` | Use a specific glossary file (e.g. the zabalgames one) |
+| `STUDIO_PASSWORD` | Gate the whole app behind HTTP Basic auth (for a shared instance) |
 
 Copy `.env.example` to `.env` and fill in only what you want. Publish buttons appear
-in the UI only for the platforms you have configured.
+in the UI only for the platforms you have configured. Other hardening knobs:
+`STUDIO_MAX_CONCURRENT` (transcription slots), `STUDIO_MAX_UPLOAD_GB` (upload cap),
+`STUDIO_CORS_ORIGINS`.
 
 ---
 
@@ -93,8 +143,12 @@ curl -F "file=@recording.mp4" -F "title=My Show" -F "clips=true" -F "socials=tru
 
 Granular endpoints: `/api/studio/process`, `/ingest`, `/{p}/render`, `/{p}/clips`,
 `/{p}/socials`, `/{p}/insights`, `/{p}/segments`, `/{p}/transcript`, `/{p}/cuts`,
-`/{p}/speakers`, `/glossary`, `/{p}/publish/{farcaster,x,youtube}`, `/projects`.
-Interactive docs at `http://localhost:8000/docs`.
+`/{p}/speakers`, `/glossary`, `/{p}/publish/{farcaster,x,youtube}`, `/projects`,
+`/{p}/zabal-export`, `/sessions`, `/casts/day-of`.
+
+Livestream-day endpoints: `/live/start`, `/{p}/live/mark`, `/{p}/marks`,
+`/{p}/live/vod`, `/{p}/clips-from-marks`, `/{p}/live/audio-chunk`,
+`/{p}/live/transcript`. Interactive docs at `http://localhost:8000/docs`.
 
 ---
 
@@ -126,15 +180,61 @@ the optional `web/` review UI.
 
 ---
 
+## Hosting a shared instance
+
+For a team instance (not just local), the app ships a container and a guard:
+
+```bash
+docker compose up -d            # builds the ffmpeg + Python image, mounts projects/ and models/
+```
+
+Set `STUDIO_PASSWORD` to put the whole app behind HTTP Basic auth, and the hardening
+knobs above to cap uploads and transcription concurrency. Full deployment notes
+(VPS, reverse proxy, volumes, health check) are in [DEPLOY.md](./DEPLOY.md). CI builds
+and smoke-tests the image on every PR.
+
+---
+
 ## Development
 
 ```bash
 pip install -r backend/requirements-dev.txt   # light test deps
-python -m pytest                                # 111 tests
+python -m pytest                                # 156 tests
 cd web && npm install && npm run build          # the optional Next.js UI
 ```
 
 CI runs the backend tests + the web build on every PR.
+
+---
+
+## Project status
+
+Built and shipped:
+
+- Recordings pipeline (transcribe -> brand glossary -> non-destructive edit/trim ->
+  captioned vertical clips -> recap/chapters/quotes -> social drafts -> publish),
+  one-command local app (`./run.sh`), and a headless CLI.
+- Ingest from a URL (YouTube / Twitch / Restream / HLS / mp4) plus a YouTube-captions
+  fast path that skips Whisper.
+- ZABAL Gamez export into the team's `recaps.json` + transcript `.md` formats, using
+  their glossary, written into a local checkout for review.
+- Opt-in Bonfire memory ingest (a recap episode is posted only when you press the
+  button; secret-scanned and PII-redacted first).
+- Livestream day: day-of casts, live clip-marking, and live transcription.
+- Production packaging: Docker, optional access password, hardening knobs, CI that
+  builds and smoke-tests the image.
+- 156 backend tests.
+
+Needs an operator (not buildable here):
+
+- Hosting the shared instance (a box with ffmpeg + SSH).
+- A `GITHUB_TOKEN` if the team wants a true auto-PR into zabalgames (today it writes
+  into a local checkout for you to review and push).
+- Go-live detection / auto-prep, which belongs in the zabalgames `/live` infra.
+
+Known follow-ups: the legacy Pillow caption fallback has a broken-pipe bug on a
+libass-less ffmpeg (clips still render, just uncaptioned; a libass-equipped ffmpeg burns
+fine), and the backend has some unpinned deps and legacy lint debt.
 
 ---
 
