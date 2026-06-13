@@ -152,6 +152,11 @@
       <h2>Live session <span class="mut" style="font-weight:300">- mark hot moments while the stream runs</span></h2>
       <div id="live-idle">
         <div class="row">
+          <input id="live-url" type="url" placeholder="stream URL (optional) - check if it's live" style="flex:1" />
+          <button id="live-check" class="ghost mini">Check if live</button>
+          <span id="live-checkinfo" class="mut"></span>
+        </div>
+        <div class="row mt">
           <input id="live-title" type="text" placeholder="session title (e.g. Tyler - Magnetiq)" style="max-width:300px" />
           <button id="live-start" class="ghost mini">Start live session</button>
         </div>
@@ -369,6 +374,16 @@ function liveRenderMarks(){
 }
 let liveTimer=null;
 function liveTick(){ if(!LIVE.started){return;} const el=Math.floor(Date.now()/1000-LIVE.started); $("live-elapsed").textContent="Live "+fmt(el); }
+$("live-check").onclick=async()=>{
+  const url=$("live-url").value.trim(); if(!url){ $("live-checkinfo").textContent="Paste a stream URL first"; return; }
+  $("live-checkinfo").textContent="Checking...";
+  try{
+    const r=await fetch(`/api/studio/golive?url=${encodeURIComponent(url)}`).then(x=>x.json());
+    if(r.live){ $("live-checkinfo").textContent="LIVE NOW: "+(r.title||r.uploader||"stream is live"); if(!$("live-title").value&&r.title) $("live-title").value=r.title; }
+    else if(r.error){ $("live-checkinfo").textContent="Not live ("+r.error+")"; }
+    else { $("live-checkinfo").textContent="Not live yet"+(r.title?" - "+r.title:""); }
+  }catch(e){ $("live-checkinfo").textContent="Error: "+e.message; }
+};
 $("live-start").onclick=async()=>{
   const title=$("live-title").value.trim();
   try{
