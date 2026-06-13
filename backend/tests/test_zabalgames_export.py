@@ -72,3 +72,20 @@ def test_em_dash_stripped():
     md = zx.transcript_md([{"text": "we shipped it - then iterated", "speaker": "Z"}],
                           "T", "2026-06-12T00:00:00.000Z", "Z")
     assert "—" not in md
+
+
+def test_write_into_repo_inserts_and_dedupes(tmp_path):
+    import json
+    repo = tmp_path
+    (repo / "data").mkdir()
+    (repo / "data" / "recaps.json").write_text(json.dumps({
+        "season": 1, "recaps": [{"transcript": "old.md", "title": "Old"}]}))
+    bundle = zx.build_export(OPTS, SEGMENTS, INSIGHTS)
+    res = zx.write_into_repo(str(repo), bundle)
+    data = json.loads((repo / "data" / "recaps.json").read_text())
+    assert data["recaps"][0]["title"] == "Building WaveWarZ"   # newest first
+    assert (repo / bundle["transcript_path"]).exists()
+    # re-write replaces, not duplicates
+    zx.write_into_repo(str(repo), bundle)
+    assert sum(1 for r in json.loads((repo / "data" / "recaps.json").read_text())["recaps"]
+               if r.get("title") == "Building WaveWarZ") == 1

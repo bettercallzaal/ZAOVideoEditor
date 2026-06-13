@@ -663,6 +663,7 @@ class ZabalExport(BaseModel):
     type: str = "workshop"
     youtube: str = ""
     episode: int = 0
+    write_to_repo: bool = False
 
 
 @router.post("/{project}/zabal-export")
@@ -694,7 +695,18 @@ async def zabal_export(project: str, body: ZabalExport):
         "track": body.track, "type": body.type, "youtube": body.youtube,
         "number": body.number, "episode": body.episode or None,
     }
-    return zx.build_export(opts, segments, insights, out_dir=project_dir / "zabal")
+    bundle = zx.build_export(opts, segments, insights, out_dir=project_dir / "zabal")
+
+    # If a local zabalgames checkout is configured, also write into it (for review).
+    repo = _os.environ.get("STUDIO_ZABALGAMES_PATH", "").strip()
+    if body.write_to_repo and repo:
+        try:
+            bundle["repo_write"] = zx.write_into_repo(repo, bundle)
+        except (RuntimeError, OSError) as e:
+            bundle["repo_write"] = {"error": str(e)}
+    elif body.write_to_repo:
+        bundle["repo_write"] = {"error": "Set STUDIO_ZABALGAMES_PATH to a local zabalgames checkout"}
+    return bundle
 
 
 @router.get("/page", response_class=HTMLResponse)
