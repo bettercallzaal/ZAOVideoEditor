@@ -56,7 +56,10 @@ A recording or link in, and out the other side:
 7. **Social** - drafted Farcaster + X posts for the episode and each clip, brand rules
    baked in (no emojis / em dashes, "100+", exact casing).
 8. **Publish** - post to Farcaster / X / upload to YouTube directly (optional, see below).
-9. **Library** - every past recording is listed; reopen and keep working.
+9. **Bundle** - pack the clips, copy, recap, posts, and transcripts into one zip to hand
+   off or bulk-post.
+10. **Library** - every past recording is listed; reopen and keep working. Search across
+    all recordings for a phrase and jump to the moment.
 
 Everything has Copy and Download buttons, so even with nothing configured you can
 process a recording and grab the outputs to post manually.
@@ -89,10 +92,16 @@ panel on the intake screen.
 - **Suggested moments** - as the live transcript fills in, the Studio surfaces
   clippable cues (excitement phrases, ZAO brand mentions, audience questions) you can
   accept as marks with one tap. It only suggests; you decide.
+- **Now playing** - post the track on the DJ deck to social, live: type it, pull it
+  from the now-playing file/URL OBS or Serato already writes, or identify it from the
+  live audio via AudD (`AUDD_API_TOKEN`). Either way you get a brand-clean post.
+- **End-of-stream recap** - when the session wraps, generate a recap + chapters +
+  clip ideas straight from the live transcript, before the VOD even downloads.
 
 The flow: check if live -> start the session and the live transcript -> mark moments
-live (or accept suggestions) -> after the stream, attach the VOD -> make clips from
-your marks -> the clips, copy, and recap flow through the normal editor.
+live (or accept suggestions), post now-playing tracks -> end-of-stream recap -> after
+the stream, attach the VOD -> make clips from your marks -> the clips, copy, and recap
+flow through the normal editor.
 
 You can also **search across every recording** from the library: type a phrase and
 jump straight to the moment in whichever past recording said it (then clip it).
@@ -115,6 +124,10 @@ formats instead of a hand-built page:
 YouTube VODs from Restream are the canonical source; the **Use YouTube captions** toggle
 pulls the VOD's own captions (a 26-minute talk in ~3s) and skips Whisper entirely.
 
+The casts panel also generates the team's distribution casts from their real
+`distribution-casts-2026-06-11.md`: the day-of two-beat, a **this-week cast** built
+from dated confirmed sessions in `workshop-leads.json`, and the static announce casts.
+
 ---
 
 ## Optional integrations (all degrade gracefully)
@@ -131,6 +144,7 @@ pulls the VOD's own captions (a 26-minute talk in ~3s) and skips Whisper entirel
 | `STUDIO_ZABALGAMES_PATH` | Write the export into a local zabalgames checkout |
 | `STUDIO_GLOSSARY_PATH` | Use a specific glossary file (e.g. the zabalgames one) |
 | `STUDIO_PASSWORD` | Gate the whole app behind HTTP Basic auth (for a shared instance) |
+| `AUDD_API_TOKEN` | Identify the now-playing track from live audio (audd.io) |
 
 Copy `.env.example` to `.env` and fill in only what you want. Publish buttons appear
 in the UI only for the platforms you have configured. Other hardening knobs:
@@ -152,12 +166,14 @@ curl -F "file=@recording.mp4" -F "title=My Show" -F "clips=true" -F "socials=tru
 
 Granular endpoints: `/api/studio/process`, `/ingest`, `/{p}/render`, `/{p}/clips`,
 `/{p}/socials`, `/{p}/insights`, `/{p}/segments`, `/{p}/transcript`, `/{p}/cuts`,
-`/{p}/speakers`, `/glossary`, `/{p}/publish/{farcaster,x,youtube}`, `/projects`,
-`/search`, `/{p}/zabal-export`, `/sessions`, `/casts/day-of`.
+`/{p}/speakers`, `/glossary`, `/{p}/publish/{farcaster,x,youtube}`, `/{p}/bundle`,
+`/projects`, `/search`, `/{p}/zabal-export`, `/sessions`,
+`/casts/{day-of,this-week,static}`.
 
 Livestream-day endpoints: `/golive`, `/live/start`, `/{p}/live/mark`, `/{p}/marks`,
 `/{p}/live/vod`, `/{p}/clips-from-marks`, `/{p}/live/audio-chunk`,
-`/{p}/live/transcript`, `/{p}/live/suggested-marks`. Interactive docs at
+`/{p}/live/transcript`, `/{p}/live/suggested-marks`, `/{p}/live/recap`,
+`/now-playing/{post,source}`, `/{p}/now-playing/identify`. Interactive docs at
 `http://localhost:8000/docs`.
 
 ---
@@ -209,7 +225,7 @@ and smoke-tests the image on every PR.
 
 ```bash
 pip install -r backend/requirements-dev.txt   # light test deps
-python -m pytest                                # 183 tests
+python -m pytest                                # 216 tests
 cd web && npm install && npm run build          # the optional Next.js UI
 ```
 
@@ -230,12 +246,14 @@ Built and shipped:
   their glossary, written into a local checkout for review.
 - Opt-in Bonfire memory ingest (a recap episode is posted only when you press the
   button; secret-scanned and PII-redacted first).
-- Livestream day: go-live detection, day-of casts, live clip-marking, live
-  transcription, and auto-mark suggestions from the live transcript.
+- Livestream day: go-live detection, day-of / this-week / announce casts, live
+  clip-marking, live transcription, auto-mark suggestions, now-playing-to-social, and
+  an end-of-stream recap from the live transcript.
 - Cross-recording library search (find a phrase across every recording, jump to it).
+- Distribution bundle (one zip: clips, copy, recap, posts, transcripts).
 - Production packaging: Docker, optional access password, hardening knobs, CI that
   builds and smoke-tests the image.
-- 183 backend tests.
+- 216 backend tests.
 
 Needs an operator (not buildable here):
 
@@ -245,9 +263,10 @@ Needs an operator (not buildable here):
 - Scheduled / channel-level go-live polling and auto-prep, which belongs in the
   zabalgames `/live` infra (the Studio does on-demand go-live checks today).
 
-Known follow-ups: the backend has some unpinned deps and legacy lint debt. (The
-Pillow caption-fallback broken-pipe bug was fixed - an early ffmpeg exit no longer
-crashes the burn.)
+Resolved follow-ups: the Pillow caption-fallback broken-pipe bug (an early ffmpeg
+exit no longer crashes the burn), and the dependency pinning / CI dev-deps gap
+(`requests` was missing) - runtime and dev deps are now pinned and a clean
+`requirements-dev.txt` install runs the full suite. No in-repo linter is configured.
 
 ---
 
