@@ -115,11 +115,15 @@ def process_recording(media_path: str, title: str = "", quality: str = "fast",
                       engine: str = "auto", out_dir: Optional[str] = None,
                       readable_llm: bool = True, plan_cuts: bool = True,
                       suggest_falsestarts: bool = False, detect_speakers: bool = False,
+                      captions_url: Optional[str] = None,
                       on_progress: Optional[Callable[[int, str], None]] = None) -> dict:
     """Run the headless transcript pipeline on a media file.
 
     quality: fast (base model, default - viable on CPU) | balanced (small) | best (large-v3).
     engine:  auto (Groq if GROQ_API_KEY set, else local) | groq | local.
+    captions_url: if set (a YouTube URL), use that video's existing captions instead
+                  of running Whisper - seconds vs minutes. Falls back to Whisper if
+                  no captions are available.
     detect_speakers: run diarization and label segments with speakers.
 
     Returns a dict with the corrected segments, the readable markdown, review
@@ -133,6 +137,26 @@ def process_recording(media_path: str, title: str = "", quality: str = "fast",
     media = Path(media_path)
     if not media.exists():
         raise FileNotFoundError(f"Media not found: {media_path}")
+
+    # Fast path: use the YouTube VOD's existing captions, skip audio + Whisper.
+    if captions_url:
+        try:
+            from .youtube_captions import fetch_captions
+            progress(12, "Fetching YouTube captions...")
+            data = fetch_captions(captions_url)
+            segments = data.get("segments", [])
+            if detect_speakers:
+                audio_path, tmp = _ensure_audio(media)
+                try:
+                    segments = _detect_speakers(str(audio_path), segments, progress)
+                finally:
+                    if tmp and tmp.exists():
+                        tmp.unlink()
+            duration = data.get("duration") or (segments[-1].get("end", 0.0) if segments else 0.0)
+            return _finish_pipeline(segments, duration, title, out_dir, readable_llm,
+                                    plan_cuts, suggest_falsestarts, media, progress)
+        except Exception as e:
+            progress(10, f"No usable captions ({e}); transcribing instead...")
 
     progress(5, "Preparing audio...")
     audio_path, tmp = _ensure_audio(media)
@@ -152,7 +176,16 @@ def process_recording(media_path: str, title: str = "", quality: str = "fast",
             tmp.unlink()
 
     duration = data.get("duration") or (segments[-1].get("end", 0.0) if segments else 0.0)
+    return _finish_pipeline(segments, duration, title, out_dir, readable_llm,
+                            plan_cuts, suggest_falsestarts, media, progress)
 
+
+def _finish_pipeline(segments, duration, title, out_dir, readable_llm,
+                     plan_cuts, suggest_falsestarts, media, progress):
+    """Stages after transcription: glossary correct -> cut plan -> readable -> write.
+
+    Shared by the Whisper path and the YouTube-captions fast path.
+    """
     progress(80, "Applying brand glossary...")
     corr = load_corrections()
     all_flags, all_changes = [], []

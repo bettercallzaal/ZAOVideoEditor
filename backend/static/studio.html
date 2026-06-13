@@ -122,6 +122,7 @@
         </select>
       </label>
       <label class="chk"><input id="speakers" type="checkbox" /> Detect speakers</label>
+      <label class="chk"><input id="usecaptions" type="checkbox" /> Use YouTube captions (fast)</label>
       <span id="picked" class="mut"></span>
     </div>
     <p class="mut mt">Tip: set a <strong>GROQ_API_KEY</strong> (free at console.groq.com) before launch for near-instant transcription of long recordings.</p>
@@ -276,7 +277,7 @@ async function runProcess(endpoint,body,isForm){
   finally{ $("go").disabled=false; $("golink").disabled=false; }
 }
 $("go").onclick=()=>{ if(!chosen)return; const fd=new FormData(); fd.append("file",chosen); fd.append("title",$("title").value); fd.append("speakers",$("speakers").checked); fd.append("quality",$("quality").value); runProcess("/api/studio/process",fd,true); };
-$("golink").onclick=()=>{ const url=$("url").value.trim(); if(!url){$("picked").textContent="Paste a link first";return;} runProcess("/api/studio/ingest",new URLSearchParams({url,title:$("title").value,speakers:$("speakers").checked,quality:$("quality").value}),false); };
+$("golink").onclick=()=>{ const url=$("url").value.trim(); if(!url){$("picked").textContent="Paste a link first";return;} runProcess("/api/studio/ingest",new URLSearchParams({url,title:$("title").value,speakers:$("speakers").checked,quality:$("quality").value,use_captions:$("usecaptions").checked}),false); };
 
 async function loadEditor(){
   $("progress").classList.add("hidden"); $("results").classList.remove("hidden");

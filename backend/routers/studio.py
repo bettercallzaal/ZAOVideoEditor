@@ -77,11 +77,11 @@ def _make_project(name: str, title: str, source: str) -> Path:
 
 
 def _do_process(task_id: str, project_dir: Path, media: str, title: str,
-                speakers: bool, quality: str = "fast"):
+                speakers: bool, quality: str = "fast", captions_url: str = ""):
     result = rp.process_recording(
         media, title=title, quality=quality, engine="auto",
         out_dir=str(project_dir / "transcripts"), readable_llm=True,
-        detect_speakers=speakers,
+        detect_speakers=speakers, captions_url=captions_url or None,
         on_progress=lambda pct, msg: tm.update_task(task_id, progress=pct, message=msg),
     )
     return {
@@ -116,7 +116,7 @@ async def process(file: UploadFile = File(...), title: str = Form(""),
 
 
 def _do_ingest_process(task_id: str, project_dir: Path, url: str, title: str,
-                       speakers: bool, quality: str = "fast"):
+                       speakers: bool, quality: str = "fast", use_captions: bool = False):
     from ..services import ingest_service
     tm.update_task(task_id, progress=2, message="Fetching from link...")
     ingest_service.download_to_project(
@@ -124,12 +124,15 @@ def _do_ingest_process(task_id: str, project_dir: Path, url: str, title: str,
         on_progress=lambda pct, msg: tm.update_task(task_id, progress=min(int(pct * 0.4), 40), message=msg),
     )
     media = _find_input(project_dir)
-    return _do_process(task_id, project_dir, str(media), title, speakers, quality)
+    # When asked, use the YouTube VOD's own captions (fast) instead of Whisper.
+    cap = url if (use_captions and ("youtube.com" in url or "youtu.be" in url)) else ""
+    return _do_process(task_id, project_dir, str(media), title, speakers, quality, captions_url=cap)
 
 
 @router.post("/ingest")
 async def ingest_link(url: str = Form(...), title: str = Form(""),
-                      speakers: bool = Form(False), quality: str = Form("fast")):
+                      speakers: bool = Form(False), quality: str = Form("fast"),
+                      use_captions: bool = Form(False)):
     """Pull a recording from a URL (YouTube / Twitch / Restream / HLS) and process it."""
     from ..services import ingest_service
     if not ingest_service.yt_dlp_available():
@@ -141,7 +144,7 @@ async def ingest_link(url: str = Form(...), title: str = Form(""),
     name = _slug(disp)
     project_dir = _make_project(name, disp, "studio-link")
     task_id = tm.create_task(name, "studio_process")
-    tm.run_in_background(task_id, _do_ingest_process, project_dir, url, disp, speakers, quality)
+    tm.run_in_background(task_id, _do_ingest_process, project_dir, url, disp, speakers, quality, use_captions)
     return {"project": name, "task_id": task_id}
 
 
