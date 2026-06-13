@@ -9,3 +9,4 @@ dist/
 .tasks.json
 credentials.json
 token.json
+.vercel-out/

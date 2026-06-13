@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ZAO Recordings Studio</title>
+<style>
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:#070709; color:#e8e8ea; font-family:ui-sans-serif,system-ui,sans-serif; }
+  .card { max-width:640px; padding:40px; }
+  h1 { color:#ff6b35; font-size:28px; margin:0 0 8px; }
+  p { color:#b9b9c2; line-height:1.6; }
+  code { background:#16161e; border:1px solid #26262e; border-radius:6px; padding:2px 7px; font-family:ui-monospace,monospace; color:#00e5ff; }
+  pre { background:#0c0c12; border:1px solid #26262e; border-radius:10px; padding:16px; overflow:auto; color:#e8e8ea; }
+  a { color:#00e5ff; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>ZAO Recordings Studio</h1>
+    <p>This tool turns a recording (or a link) into a clean transcript, a trimmed video,
+    vertical clips, and drafted social posts. It runs as a local/server app - it needs
+    ffmpeg and Whisper, so it does not run on Vercel's serverless platform.</p>
+    <p>Run it yourself:</p>
+    <pre>git clone https://github.com/bettercallzaal/ZAOVideoEditor
+cd ZAOVideoEditor
+./run.sh            # local, opens http://localhost:8000
+# or: docker compose up -d   (shared instance - see DEPLOY.md)</pre>
+    <p>Code + docs: <a href="https://github.com/bettercallzaal/ZAOVideoEditor">github.com/bettercallzaal/ZAOVideoEditor</a></p>
+  </div>
+</body>
+</html>
