@@ -651,6 +651,44 @@ async def push_bonfire(project: str):
         raise HTTPException(400, str(e))
 
 
+class ZabalExport(BaseModel):
+    number: int = 0
+    presenter: str = ""
+    track: str = ""
+    youtube: str = ""
+
+
+@router.post("/{project}/zabal-export")
+async def zabal_export(project: str, body: ZabalExport):
+    """Emit the ZABAL Gamez repo formats: a recaps.json block + the transcript .md.
+
+    Requires that key moments were extracted (the recap/chapters drive the block).
+    """
+    project_dir = _project_dir(project)
+    from ..services import zabalgames_export as zx
+    segments = _load_segments(project_dir)
+    insights_file = project_dir / "metadata" / "insights.json"
+    if not insights_file.exists():
+        raise HTTPException(400, "Extract key moments first - the recap drives the recaps block")
+    insights = json.loads(insights_file.read_text())
+
+    title = _project_title(project_dir)
+    date = ""
+    pj = project_dir / "project.json"
+    if pj.exists():
+        try:
+            date = (json.loads(pj.read_text()).get("created_at", "") or "")[:10]
+        except (ValueError, OSError):
+            pass
+
+    bundle = zx.build_export(
+        number=body.number, title=title, date=date or "0000-00-00",
+        presenter=body.presenter or title, segments=segments, insights=insights,
+        track=body.track, youtube=body.youtube, out_dir=project_dir / "zabal",
+    )
+    return bundle
+
+
 @router.get("/page", response_class=HTMLResponse)
 async def page():
     html = STATIC_DIR / "studio.html"

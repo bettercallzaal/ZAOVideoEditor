@@ -10,12 +10,19 @@ reconciled with the canonical file in zabalgames when wired).
 """
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import Optional
 
 
-CORRECTIONS_PATH = Path(__file__).parent.parent / "data" / "transcript-corrections.json"
+# Point this at the canonical zabalgames data/transcript-corrections.json via
+# STUDIO_GLOSSARY_PATH so the Studio reads AND writes the team's living glossary
+# (the "fix a word once, it learns" file). Defaults to the bundled seed copy.
+CORRECTIONS_PATH = Path(
+    os.environ.get("STUDIO_GLOSSARY_PATH", "").strip()
+    or (Path(__file__).parent.parent / "data" / "transcript-corrections.json")
+)
 
 
 def load_corrections(path: Optional[Path] = None) -> dict:
