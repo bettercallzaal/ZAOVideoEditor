@@ -99,6 +99,10 @@
       <h2 style="margin:0">Recent recordings</h2>
       <button id="newrec" class="ghost mini">New recording</button>
     </div>
+    <div class="row mt">
+      <input id="libsearch" type="search" placeholder="Search across all recordings (e.g. WaveWarZ, the drop, a guest name)" style="flex:1" />
+    </div>
+    <div id="libsearchout"></div>
     <div id="liblist" class="mt"></div>
   </div>
 
@@ -304,6 +308,27 @@ async function loadLibrary(){
 }
 $("newrec").onclick=()=>{ $("intake").classList.remove("hidden"); $("results").classList.add("hidden"); };
 loadLibrary();
+
+// --- cross-recording search ---
+function openAt(proj,t){ project=proj; $("intake").classList.add("hidden"); $("library").classList.add("hidden");
+  loadEditor().then(()=>{ const v=$("vid"); if(v){ v.currentTime=t; v.play&&v.play().catch(()=>{}); } }); }
+let searchT=null;
+$("libsearch").oninput=()=>{ clearTimeout(searchT); searchT=setTimeout(runSearch,300); };
+async function runSearch(){
+  const q=$("libsearch").value.trim(); const out=$("libsearchout"); const list=$("liblist");
+  if(q.length<2){ out.innerHTML=""; list.style.display=""; return; }
+  list.style.display="none";
+  try{
+    const res=await fetch(`/api/studio/search?q=${encodeURIComponent(q)}`).then(r=>r.json());
+    if(!res.length){ out.innerHTML=`<p class="mut mt">No matches for "${q.replace(/</g,"&lt;")}".</p>`; return; }
+    out.innerHTML=res.map(r=>{
+      const date=(r.created_at||"").slice(0,10);
+      const hits=r.matches.map(m=>`<div class="seg" data-p="${r.project}" data-t="${m.start}"><span class="ts">${fmt(m.start)}</span> ${(m.text||"").replace(/</g,"&lt;")}</div>`).join("");
+      return `<div class="panel" style="margin-top:10px"><div class="lt">${r.title} <span class="mut" style="font-weight:300">${date} - ${r.count} hit${r.count>1?"s":""}</span></div>${hits}</div>`;
+    }).join("");
+    out.querySelectorAll(".seg").forEach(el=>el.onclick=()=>openAt(el.dataset.p,+el.dataset.t));
+  }catch(e){ out.innerHTML=`<p class="mut mt" style="color:#ff6b35">${e.message}</p>`; }
+}
 
 let PUB={farcaster:false,x:false,youtube:false};
 fetch("/api/studio/publishers").then(r=>r.json()).then(p=>{PUB=p;}).catch(()=>{});

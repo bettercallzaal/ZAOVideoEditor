@@ -410,6 +410,14 @@ async def list_projects():
     return out
 
 
+@router.get("/search")
+async def search_library(q: str = "", limit: int = 5):
+    """Find a phrase across every processed recording, with timestamps."""
+    from ..services import library_search
+    return library_search.search_transcripts(
+        PROJECTS_DIR, q, limit_per_project=max(1, min(limit, 25)))
+
+
 def _do_insights(task_id: str, project_dir: Path):
     """Recap + chapters + quotes + action items from the transcript (one LLM call)."""
     from ..services.content_gen import generate_recap_and_clips
