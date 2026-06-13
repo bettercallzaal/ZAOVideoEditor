@@ -278,6 +278,27 @@ async def download_clip(project: str, filename: str):
     return FileResponse(str(fp), media_type="video/mp4", filename=fp.name)
 
 
+@router.post("/{project}/bundle")
+async def make_bundle(project: str):
+    """Pack everything postable (clips, copy, recap, posts, transcripts) into one zip."""
+    from ..services import bundle_service
+    project_dir = _project_dir(project)
+    if not project_dir.exists():
+        raise HTTPException(404, "Project not found")
+    res = bundle_service.build_bundle(project_dir)
+    return {"manifest": res["manifest"], "entries": res["entries"],
+            "download": f"/api/studio/{project}/bundle/download"}
+
+
+@router.get("/{project}/bundle/download")
+async def download_bundle(project: str):
+    project_dir = _project_dir(project)
+    zip_path = project_dir / "exports" / f"{project_dir.name}-bundle.zip"
+    if not zip_path.exists():
+        raise HTTPException(404, "No bundle yet - build it first")
+    return FileResponse(str(zip_path), media_type="application/zip", filename=zip_path.name)
+
+
 def _do_socials(task_id: str, project_dir: Path):
     from ..services import social_gen
     tdir = project_dir / "transcripts"

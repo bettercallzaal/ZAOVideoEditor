@@ -286,6 +286,12 @@
           <div id="socials"></div>
         </div>
 
+        <div class="panel">
+          <h2>Distribution bundle</h2>
+          <div class="row"><button id="makebundle" class="ghost mini">Build bundle</button><span id="bundleinfo" class="mut">One zip: clips, copy, recap, posts, transcript.</span></div>
+          <div id="bundleout"></div>
+        </div>
+
         <div class="panel" id="flagspanel">
           <h2>Review these by hand</h2>
           <div id="flags"></div>
@@ -527,6 +533,18 @@ async function makeNowPlayingPost(){
   }catch(e){ $("np-out").innerHTML=`<p class="mut" style="color:#ff6b35">${e.message}</p>`; }
 }
 $("np-go").onclick=makeNowPlayingPost;
+
+// Distribution bundle
+$("makebundle").onclick=async()=>{
+  $("bundleinfo").textContent="Building...";
+  try{
+    const r=await fetch(`/api/studio/${project}/bundle`,{method:"POST"}).then(x=>x.json());
+    if(r.detail) throw new Error(r.detail);
+    const m=r.manifest||{};
+    $("bundleinfo").textContent=`${m.clips||0} clips${m.has_recap?", recap":""}${m.has_posts?", posts":""}${m.has_transcript?", transcript":""}`;
+    $("bundleout").innerHTML=`<a class="dl" href="${r.download}">Download ${m.project}-bundle.zip</a><div class="mut mt">Contains: ${(r.entries||[]).join(", ")}</div>`;
+  }catch(e){ $("bundleinfo").textContent="Error: "+e.message; }
+};
 $("np-pull").onclick=async()=>{
   const source=$("np-source").value.trim(); if(!source){ toast("Set a source URL/file first"); return; }
   try{
