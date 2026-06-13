@@ -177,6 +177,19 @@
         <div class="row mt"><span class="mut">Suggested moments</span><button id="live-suggest" class="ghost mini">Refresh suggestions</button></div>
         <div id="live-suggestions"></div>
         <hr style="border:none;border-top:1px solid var(--line);margin:14px 0" />
+        <div class="row"><span class="mut">Now playing on the deck</span></div>
+        <div class="row mt">
+          <input id="np-title" type="text" placeholder="song / track" style="flex:1" />
+          <input id="np-artist" type="text" placeholder="artist" style="max-width:180px" />
+          <button id="np-go" class="ghost mini">Make post</button>
+        </div>
+        <div class="row mt">
+          <input id="np-source" type="text" placeholder="now-playing source URL or file (OBS / Serato), optional" style="flex:1" />
+          <button id="np-pull" class="ghost mini">Pull</button>
+          <button id="np-identify" class="ghost mini">Identify song</button>
+        </div>
+        <div id="np-out"></div>
+        <hr style="border:none;border-top:1px solid var(--line);margin:14px 0" />
         <div class="row">
           <input id="live-vod" type="url" placeholder="VOD URL (YouTube / Restream / .mp4) after the stream" style="flex:1" />
           <label class="chk"><input id="live-vodcap" type="checkbox" /> YouTube captions</label>
@@ -494,6 +507,51 @@ async function loadSuggestions(){
   }catch(e){ $("live-suggestions").innerHTML=`<p class="mut" style="color:#ff6b35">${e.message}</p>`; }
 }
 $("live-suggest").onclick=loadSuggestions;
+
+// Now playing on the DJ deck -> social post
+async function makeNowPlayingPost(){
+  const title=$("np-title").value.trim(); if(!title){ toast("Enter a song first"); return; }
+  try{
+    const r=await fetch("/api/studio/now-playing/post",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title,artist:$("np-artist").value.trim()})}).then(x=>x.json());
+    if(r.detail) throw new Error(r.detail);
+    const out=$("np-out"); out.innerHTML="";
+    [["Farcaster",r.farcaster],["X",r.x]].forEach(([lab,txt])=>{
+      const w=document.createElement("div"); w.className="post";
+      w.innerHTML=`<div class="lab">${lab}</div><pre style="white-space:pre-wrap;margin:6px 0;background:none;border:0;padding:0;font-family:Outfit;font-size:14px">${txt.replace(/</g,"&lt;")}</pre>`;
+      const row=document.createElement("div"); row.className="row";
+      const c=document.createElement("button"); c.className="ghost mini"; c.textContent="Copy"; c.onclick=()=>copyText(txt,c); row.appendChild(c);
+      const target=lab==="Farcaster"?"farcaster":"x";
+      if(PUB[target]&&LIVE.project){ const pb=document.createElement("button"); pb.className="ghost mini"; pb.textContent="Publish to "+lab; pb.onclick=()=>publish(target,txt,pb); row.appendChild(pb); }
+      w.appendChild(row); out.appendChild(w);
+    });
+  }catch(e){ $("np-out").innerHTML=`<p class="mut" style="color:#ff6b35">${e.message}</p>`; }
+}
+$("np-go").onclick=makeNowPlayingPost;
+$("np-pull").onclick=async()=>{
+  const source=$("np-source").value.trim(); if(!source){ toast("Set a source URL/file first"); return; }
+  try{
+    const r=await fetch(`/api/studio/now-playing/source?source=${encodeURIComponent(source)}`).then(x=>x.json());
+    if(r.error){ toast(r.error); return; }
+    $("np-title").value=r.title||r.raw||""; $("np-artist").value=r.artist||"";
+    if($("np-title").value) makeNowPlayingPost();
+  }catch(e){ toast("Error: "+e.message); }
+};
+$("np-identify").onclick=async()=>{
+  if(!CAP.on||!CAP.stream){ toast("Start the live transcript first (it shares the audio)"); return; }
+  if(!LIVE.project)return;
+  $("np-out").innerHTML='<p class="mut">Listening for the track...</p>';
+  const rec=new MediaRecorder(CAP.stream,{mimeType:MediaRecorder.isTypeSupported("audio/webm")?"audio/webm":""});
+  const parts=[]; rec.ondataavailable=e=>{ if(e.data&&e.data.size)parts.push(e.data); };
+  rec.onstop=async()=>{
+    const fd=new FormData(); fd.append("audio",new Blob(parts,{type:"audio/webm"}),"sample.webm");
+    try{
+      const r=await fetch(`/api/studio/${LIVE.project}/now-playing/identify`,{method:"POST",body:fd}).then(x=>x.json());
+      if(r.error){ $("np-out").innerHTML=`<p class="mut">${r.error}</p>`; return; }
+      $("np-title").value=r.title||""; $("np-artist").value=r.artist||""; makeNowPlayingPost();
+    }catch(e){ $("np-out").innerHTML=`<p class="mut" style="color:#ff6b35">${e.message}</p>`; }
+  };
+  rec.start(); setTimeout(()=>{ if(rec.state!=="inactive")rec.stop(); },8000);
+};
 async function publish(target,text,btn){
   btn.disabled=true; const o=btn.textContent; btn.textContent="Posting...";
   try{ const r=await fetch(`/api/studio/${project}/publish/${target}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})}).then(x=>x.json());

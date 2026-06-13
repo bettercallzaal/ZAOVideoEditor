@@ -758,6 +758,47 @@ async def casts_day_of(body: DayOfCasts):
 # seconds-from-start. After the stream, attach the VOD to the same project and
 # the marks become clip ranges around each moment.
 
+class NowPlaying(BaseModel):
+    title: str = ""
+    artist: str = ""
+    handle: str = ""
+    live_url: str = ""
+
+
+@router.post("/now-playing/post")
+async def now_playing_post(body: NowPlaying):
+    """Brand-clean 'now playing' posts for the current track on the deck."""
+    from ..services import nowplaying
+    if body.title and not body.artist:
+        parsed = nowplaying.parse_track(body.title)
+        body.title, body.artist = parsed["title"], parsed["artist"] or body.artist
+    res = nowplaying.now_playing_post(body.title, body.artist, body.live_url, body.handle)
+    if res.get("error"):
+        raise HTTPException(422, res["error"])
+    return res
+
+
+@router.get("/now-playing/source")
+async def now_playing_source(source: str = ""):
+    """Read the current track from a now-playing file/URL (OBS / Serato / rekordbox)."""
+    from ..services import nowplaying
+    return nowplaying.fetch_source(source)
+
+
+@router.post("/{project}/now-playing/identify")
+async def now_playing_identify(project: str, audio: UploadFile = File(...)):
+    """Identify the track from a short audio sample (needs AUDD_API_TOKEN)."""
+    from ..services import nowplaying
+    project_dir = _project_dir(project)
+    if not project_dir.exists():
+        raise HTTPException(404, "Project not found")
+    tmp = project_dir / "live_chunks"
+    tmp.mkdir(parents=True, exist_ok=True)
+    dest = tmp / "nowplaying_sample.webm"
+    await _save_upload(audio, dest)
+    return nowplaying.recognize(str(dest))
+
+
 @router.get("/golive")
 async def golive_check(url: str = ""):
     """Is this channel / stream URL live right now? (never errors)."""
