@@ -59,3 +59,11 @@ git pull && docker compose up -d --build
 - Publishing (Farcaster/X/YouTube) and Bonfire memory are opt-in and only active
   when their credentials are set - see `.env.example`.
 - Health check: `GET /api/health` (used by Docker's healthcheck).
+
+## Vercel
+
+The Studio cannot run on Vercel (it needs a long-running server with ffmpeg +
+Whisper). The root `vercel.json` makes Vercel ship a small static landing page so
+deploys stay green instead of failing as a mis-detected Python build. To instead
+deploy the optional Next.js team review UI, set the Vercel project Root Directory
+to `web/` and delete the root `vercel.json`.
