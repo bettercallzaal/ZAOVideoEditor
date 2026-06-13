@@ -69,6 +69,9 @@ The Studio also helps while a stream is actually running, then bridges straight
 into the clip pipeline once the VOD exists. All of it lives in the **Live session**
 panel on the intake screen.
 
+- **Go-live detection** - paste a stream URL and **Check if live** tells you whether
+  it is live right now (via the yt-dlp probe), prefilling the session title from the
+  stream so you can start in one click.
 - **Day-of casts** - the 15-minute-warning and "live now" posts for a session, in
   the team's exact templates, filled from the schedule. Pick a session (or type the
   details), get both casts brand-clean and ready to copy.
@@ -83,10 +86,16 @@ panel on the intake screen.
   clips (share the tab playing the stream, or fall back to the mic) and transcribes
   each on the fast path as you go, so the words scroll by while you mark. Same Groq /
   local routing and brand glossary as the main pipeline.
+- **Suggested moments** - as the live transcript fills in, the Studio surfaces
+  clippable cues (excitement phrases, ZAO brand mentions, audience questions) you can
+  accept as marks with one tap. It only suggests; you decide.
 
-The flow: start the session and the live transcript -> mark moments live -> after the
-stream, attach the VOD -> make clips from your marks -> the clips, copy, and recap
-flow through the normal editor.
+The flow: check if live -> start the session and the live transcript -> mark moments
+live (or accept suggestions) -> after the stream, attach the VOD -> make clips from
+your marks -> the clips, copy, and recap flow through the normal editor.
+
+You can also **search across every recording** from the library: type a phrase and
+jump straight to the moment in whichever past recording said it (then clip it).
 
 ---
 
@@ -144,11 +153,12 @@ curl -F "file=@recording.mp4" -F "title=My Show" -F "clips=true" -F "socials=tru
 Granular endpoints: `/api/studio/process`, `/ingest`, `/{p}/render`, `/{p}/clips`,
 `/{p}/socials`, `/{p}/insights`, `/{p}/segments`, `/{p}/transcript`, `/{p}/cuts`,
 `/{p}/speakers`, `/glossary`, `/{p}/publish/{farcaster,x,youtube}`, `/projects`,
-`/{p}/zabal-export`, `/sessions`, `/casts/day-of`.
+`/search`, `/{p}/zabal-export`, `/sessions`, `/casts/day-of`.
 
-Livestream-day endpoints: `/live/start`, `/{p}/live/mark`, `/{p}/marks`,
+Livestream-day endpoints: `/golive`, `/live/start`, `/{p}/live/mark`, `/{p}/marks`,
 `/{p}/live/vod`, `/{p}/clips-from-marks`, `/{p}/live/audio-chunk`,
-`/{p}/live/transcript`. Interactive docs at `http://localhost:8000/docs`.
+`/{p}/live/transcript`, `/{p}/live/suggested-marks`. Interactive docs at
+`http://localhost:8000/docs`.
 
 ---
 
@@ -199,7 +209,7 @@ and smoke-tests the image on every PR.
 
 ```bash
 pip install -r backend/requirements-dev.txt   # light test deps
-python -m pytest                                # 156 tests
+python -m pytest                                # 183 tests
 cd web && npm install && npm run build          # the optional Next.js UI
 ```
 
@@ -220,21 +230,24 @@ Built and shipped:
   their glossary, written into a local checkout for review.
 - Opt-in Bonfire memory ingest (a recap episode is posted only when you press the
   button; secret-scanned and PII-redacted first).
-- Livestream day: day-of casts, live clip-marking, and live transcription.
+- Livestream day: go-live detection, day-of casts, live clip-marking, live
+  transcription, and auto-mark suggestions from the live transcript.
+- Cross-recording library search (find a phrase across every recording, jump to it).
 - Production packaging: Docker, optional access password, hardening knobs, CI that
   builds and smoke-tests the image.
-- 156 backend tests.
+- 183 backend tests.
 
 Needs an operator (not buildable here):
 
 - Hosting the shared instance (a box with ffmpeg + SSH).
 - A `GITHUB_TOKEN` if the team wants a true auto-PR into zabalgames (today it writes
   into a local checkout for you to review and push).
-- Go-live detection / auto-prep, which belongs in the zabalgames `/live` infra.
+- Scheduled / channel-level go-live polling and auto-prep, which belongs in the
+  zabalgames `/live` infra (the Studio does on-demand go-live checks today).
 
-Known follow-ups: the legacy Pillow caption fallback has a broken-pipe bug on a
-libass-less ffmpeg (clips still render, just uncaptioned; a libass-equipped ffmpeg burns
-fine), and the backend has some unpinned deps and legacy lint debt.
+Known follow-ups: the backend has some unpinned deps and legacy lint debt. (The
+Pillow caption-fallback broken-pipe bug was fixed - an early ffmpeg exit no longer
+crashes the burn.)
 
 ---
 
