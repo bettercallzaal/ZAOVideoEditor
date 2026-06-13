@@ -709,6 +709,42 @@ async def zabal_export(project: str, body: ZabalExport):
     return bundle
 
 
+@router.get("/sessions")
+async def sessions():
+    """The ZABAL Gamez session lineup (from workshop-leads.json) for the casts picker."""
+    from ..services import live_casts
+    return live_casts.list_sessions()
+
+
+class DayOfCasts(BaseModel):
+    name: str = ""
+    org: str = ""
+    topic: str = ""
+    time: str = ""
+    luma: str = ""
+    handle: str = ""
+    session_id: str = ""
+
+
+@router.post("/casts/day-of")
+async def casts_day_of(body: DayOfCasts):
+    """Generate the 15-min-warning + live-now casts for a session."""
+    from ..services import live_casts
+    name, org, topic, handle, luma = body.name, body.org, body.topic, body.handle, body.luma
+    if body.session_id:
+        for s in live_casts.list_sessions():
+            if s["id"] == body.session_id:
+                name = name or s["name"]
+                org = org or s["org"]
+                topic = topic or s["topic"]
+                handle = handle or s["handle"]
+                luma = luma or s["luma"]
+                break
+    if not name:
+        raise HTTPException(422, "A session name (or session_id) is required")
+    return live_casts.day_of_casts(name, org, topic, body.time, luma, handle)
+
+
 @router.get("/page", response_class=HTMLResponse)
 async def page():
     html = STATIC_DIR / "studio.html"
