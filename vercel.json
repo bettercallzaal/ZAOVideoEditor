@@ -1,4 +1,5 @@
 {
+  "installCommand": "echo 'no install - the Studio runs on a server, not Vercel'",
   "buildCommand": "mkdir -p .vercel-out && cp vercel-landing.html .vercel-out/index.html",
   "outputDirectory": ".vercel-out",
   "framework": null
