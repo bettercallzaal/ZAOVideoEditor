@@ -277,6 +277,12 @@
         </div>
 
         <div class="panel">
+          <h2>YouTube package <span class="mut" style="font-weight:300">- title, description with chapters, tags</span></h2>
+          <div class="row"><button id="makeyt" class="ghost mini">Build YouTube package</button><span id="ytinfo" class="mut">Needs key moments first.</span></div>
+          <div id="ytout"></div>
+        </div>
+
+        <div class="panel">
           <h2>ZABAL Gamez export <span class="mut" style="font-weight:300">- recaps.json block + transcript .md</span></h2>
           <div class="row">
             <input id="zg-num" type="text" placeholder="recording #" style="max-width:90px" />
@@ -576,6 +582,24 @@ async function makeNowPlayingPost(){
   }catch(e){ $("np-out").innerHTML=`<p class="mut" style="color:#ff6b35">${e.message}</p>`; }
 }
 $("np-go").onclick=makeNowPlayingPost;
+
+// YouTube package
+$("makeyt").onclick=async()=>{
+  $("ytinfo").textContent="Building...";
+  try{
+    const r=await fetch(`/api/studio/${project}/youtube`).then(x=>x.json());
+    if(r.detail) throw new Error(r.detail);
+    $("ytinfo").textContent="Ready";
+    const out=$("ytout"); out.innerHTML="";
+    const blocks=[["Title",r.title],["Description",r.description],["Tags",(r.tags||[]).join(", ")]];
+    blocks.forEach(([lab,txt])=>{
+      if(!txt) return;
+      const w=document.createElement("div"); w.className="post";
+      w.innerHTML=`<div class="lab">${lab}</div><pre style="white-space:pre-wrap;margin:6px 0;background:none;border:0;padding:0;font-family:Outfit;font-size:14px">${txt.replace(/</g,"&lt;")}</pre>`;
+      const b=document.createElement("button"); b.className="ghost mini"; b.textContent="Copy"; b.onclick=()=>copyText(txt,b); w.appendChild(b); out.appendChild(w);
+    });
+  }catch(e){ $("ytinfo").textContent="Error: "+e.message; }
+};
 
 // Distribution bundle
 $("makebundle").onclick=async()=>{
