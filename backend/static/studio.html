@@ -649,6 +649,8 @@ async function loadEditor(){
   $("vid").src=`/api/studio/${project}/video`;
   $("downloads").innerHTML=`<a class="dl" href="/api/studio/${project}/download/readable">Readable transcript</a>
     <a class="dl" href="/api/studio/${project}/download/cut">Timestamped transcript</a>
+    <a class="dl" href="/api/studio/${project}/subtitles/srt">Subtitles (SRT)</a>
+    <a class="dl" href="/api/studio/${project}/subtitles/vtt">Subtitles (VTT)</a>
     <a class="dl" href="/api/studio/${project}/download/editsheet">Edit sheet</a>`;
   if(res.has_trimmed) addTrimmedLink();
   renderTranscript(); renderCuts(); renderSpeakers(seg.speakers); renderFlags(res.review_flags); loadClips();
