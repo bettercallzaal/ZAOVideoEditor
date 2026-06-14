@@ -595,6 +595,15 @@ async def serve_input_video(project: str):
                         headers={"Accept-Ranges": "bytes"})
 
 
+@router.get("/{project}/speaker-stats")
+async def speaker_stats_endpoint(project: str):
+    """Per-speaker talk time and share of the conversation (needs detected speakers)."""
+    from ..services import speaker_stats
+    project_dir = _project_dir(project)
+    segments = _load_segments(project_dir)
+    return speaker_stats.talk_time(segments)
+
+
 @router.get("/{project}/youtube")
 async def youtube_package(project: str):
     """A ready-to-paste YouTube title, description (with 0:00 chapters), and tags."""
