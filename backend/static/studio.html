@@ -86,13 +86,85 @@
   .spkrow input { max-width:220px; }
   .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--orange); color:#0a0a0a; padding:10px 18px; border-radius:99px; font-weight:600; font-size:13px; opacity:0; transition:.2s; pointer-events:none; }
   .toast.show { opacity:1; }
+  /* onboarding + shareability */
+  header .spacer { flex:1; }
+  header .htools { display:flex; gap:8px; }
+  .hero { background:linear-gradient(135deg,rgba(255,107,53,.10),rgba(0,229,255,.06)); border:1px solid var(--line); border-radius:16px; padding:24px; margin-bottom:18px; }
+  .hero h2 { margin:0 0 6px; font-size:22px; color:var(--txt); font-weight:800; }
+  .hero p { margin:0; color:#c2c2cc; font-size:15px; max-width:680px; line-height:1.5; }
+  .steps { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:18px; }
+  @media (max-width:760px){ .steps { grid-template-columns:1fr; } }
+  .step { background:rgba(0,0,0,.25); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .step .n { font-family:Syne; font-weight:800; color:var(--orange); font-size:13px; }
+  .step .st { font-weight:600; margin:4px 0 2px; }
+  .step .sd { color:var(--mut); font-size:13px; line-height:1.45; }
+  .feats { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; margin-top:14px; }
+  .feat { display:flex; gap:10px; align-items:flex-start; padding:11px 12px; border:1px solid var(--line); border-radius:11px; background:var(--panel2); }
+  .feat .fi { font-family:Syne; font-weight:800; color:var(--cyan); font-size:12px; min-width:18px; }
+  .feat .ft { font-weight:600; font-size:14px; }
+  .feat .fd { color:var(--mut); font-size:12px; line-height:1.4; }
+  .intake-card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; }
+  .intake-card h3 { margin:0 0 4px; font-size:15px; color:var(--cyan); font-family:Syne; }
+  .intake-card .ch { color:var(--mut); font-size:12px; margin:0 0 12px; }
+  .intake-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:760px){ .intake-grid { grid-template-columns:1fr; } }
+  .overlay { position:fixed; inset:0; background:rgba(0,0,0,.66); display:none; align-items:flex-start; justify-content:center; padding:40px 16px; overflow:auto; z-index:50; }
+  .overlay.show { display:flex; }
+  .modal { background:var(--panel); border:1px solid var(--line); border-radius:16px; max-width:680px; width:100%; padding:24px; }
+  .modal h2 { margin:0 0 4px; font-size:20px; }
+  .modal h3 { color:var(--cyan); font-size:14px; margin:18px 0 8px; }
+  .modal .close { float:right; }
+  .modal pre { background:#0c0c12; border:1px solid var(--line); border-radius:9px; padding:11px 13px; font-family:'JetBrains Mono',monospace; font-size:12.5px; overflow:auto; color:#d6d6dc; }
+  .caprow { display:flex; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); font-size:13.5px; }
+  .caprow .dot { width:9px; height:9px; border-radius:99px; flex:none; }
+  .caprow .dot.on { background:#33d17a; } .caprow .dot.off { background:#44444e; }
+  .caprow .cl { font-weight:500; } .caprow .cd { color:var(--mut); font-size:12px; }
+  .caprow .ch2 { margin-left:auto; color:#6a6a74; font-size:11.5px; font-family:'JetBrains Mono',monospace; }
+  .pill { font-family:Syne; font-size:10px; padding:2px 8px; border-radius:99px; background:#1f1f28; color:var(--cyan); text-transform:uppercase; letter-spacing:.04em; }
 </style>
 </head>
 <body>
 <header>
   <h1>ZAO Recordings Studio</h1>
-  <p>Recording or link in. Clean transcript, trimmed video, clips, and social posts out.</p>
+  <p>Recording or link in. Clips, posts, transcript, and more out.</p>
+  <span class="spacer"></span>
+  <div class="htools">
+    <button id="open-help" class="ghost mini">How it works</button>
+    <button id="open-setup" class="ghost mini">Setup <span id="setup-count" class="pill"></span></button>
+  </div>
 </header>
+
+<div id="help-overlay" class="overlay">
+  <div class="modal">
+    <button class="ghost mini close" data-close="help-overlay">Close</button>
+    <h2>How it works</h2>
+    <p class="mut">A local-first studio for turning ZAO recordings and livestreams into distributed media. Everything runs on your machine.</p>
+    <h3>The flow</h3>
+    <p>1. Bring a recording (drop a file) or a link (YouTube / Twitch / Restream), or run a live session. 2. It transcribes, brand-corrects, and opens an editor. 3. Make clips, posts, a YouTube package, subtitles, a recap, and a bundle - copy or publish.</p>
+    <h3>Run it yourself</h3>
+    <pre>git clone https://github.com/bettercallzaal/ZAOVideoEditor
+cd ZAOVideoEditor
+./run.sh            # opens http://localhost:8000</pre>
+    <p class="mut">Only requirement: ffmpeg on your PATH. For instant transcription of long files, set a free GROQ_API_KEY before launch.</p>
+    <h3>Share it with a team</h3>
+    <pre>docker compose up -d            # ffmpeg + Python image, mounts projects/
+# set STUDIO_PASSWORD to gate the shared instance</pre>
+    <p class="mut">Full deploy notes are in DEPLOY.md. Open <strong>Setup</strong> to see what is enabled on this instance and how to turn on more.</p>
+  </div>
+</div>
+
+<div id="setup-overlay" class="overlay">
+  <div class="modal">
+    <button class="ghost mini close" data-close="setup-overlay">Close</button>
+    <h2>Setup</h2>
+    <p class="mut" id="setup-sub">What this instance can do, and how to enable the rest.</p>
+    <h3>Always on</h3>
+    <div id="cap-core"></div>
+    <h3>Integrations</h3>
+    <div id="cap-integrations"></div>
+    <p class="mut mt">Set the listed env vars (or copy <strong>.env.example</strong> to <strong>.env</strong>) and restart. Anything off still works - it just falls back or hides its buttons.</p>
+  </div>
+</div>
 <main>
   <div id="library" class="panel hidden" style="margin-top:0">
     <div class="row" style="justify-content:space-between">
@@ -107,29 +179,65 @@
   </div>
 
   <div id="intake">
-    <div id="drop" class="drop">
-      <strong>Drop a recording here</strong> or click to choose<br/>
-      <small>mp4, mov, mkv, webm, or an audio file</small>
-      <input id="file" type="file" accept="video/*,audio/*" class="hidden" />
+    <div class="hero">
+      <h2>Turn a recording or livestream into clips, posts, and a clean transcript</h2>
+      <p>Drop a file, paste a link, or run a live session. The Studio transcribes it, fixes ZAO brand terms, and gives you vertical clips with captions, social drafts, a YouTube package, subtitles, a recap, and a one-zip bundle - copy or publish, all from your own machine.</p>
+      <div class="steps">
+        <div class="step"><div class="n">STEP 1</div><div class="st">Bring it in</div><div class="sd">Upload a file, paste a link, or go live.</div></div>
+        <div class="step"><div class="n">STEP 2</div><div class="st">Edit fast</div><div class="sd">A transcript-synced editor - delete a line to cut it from the video.</div></div>
+        <div class="step"><div class="n">STEP 3</div><div class="st">Distribute</div><div class="sd">Clips, posts, subtitles, a YouTube package, and a bundle.</div></div>
+      </div>
     </div>
-    <div class="or">OR PASTE A LINK</div>
-    <input id="url" type="url" placeholder="YouTube / Twitch / Restream / .m3u8 / .mp4 URL" />
-    <input id="title" type="text" placeholder="Title (optional)" class="mt" />
-    <div class="row mt">
-      <button id="go" disabled>Process recording</button>
-      <button id="golink" class="ghost">Process from link</button>
-      <label class="chk">Speed:
-        <select id="quality">
-          <option value="fast" selected>Fast (recommended)</option>
-          <option value="balanced">Balanced</option>
-          <option value="best">Best (slow on CPU)</option>
-        </select>
-      </label>
-      <label class="chk"><input id="speakers" type="checkbox" /> Detect speakers</label>
-      <label class="chk"><input id="usecaptions" type="checkbox" /> Use YouTube captions (fast)</label>
-      <span id="picked" class="mut"></span>
+
+    <div class="intake-grid">
+      <div class="intake-card">
+        <h3>Upload a recording</h3>
+        <p class="ch">mp4, mov, mkv, webm, or an audio file</p>
+        <div id="drop" class="drop">
+          <strong>Drop a file here</strong> or click to choose
+          <input id="file" type="file" accept="video/*,audio/*" class="hidden" />
+        </div>
+        <div class="row mt"><button id="go" disabled>Process recording</button><span id="picked" class="mut"></span></div>
+      </div>
+      <div class="intake-card">
+        <h3>Paste a link</h3>
+        <p class="ch">YouTube / Twitch / Restream / .m3u8 / .mp4</p>
+        <input id="url" type="url" placeholder="https://..." />
+        <label class="chk mt"><input id="usecaptions" type="checkbox" /> Use the YouTube captions (instant, skips transcription)</label>
+        <div class="row mt"><button id="golink" class="ghost">Process from link</button></div>
+      </div>
     </div>
-    <p class="mut mt">Tip: set a <strong>GROQ_API_KEY</strong> (free at console.groq.com) before launch for near-instant transcription of long recordings.</p>
+
+    <div class="intake-card mt">
+      <strong>Title and options</strong>
+      <p class="ch" style="margin:2px 0 0">Applies to whichever you start above.</p>
+      <input id="title" type="text" placeholder="Title (optional)" class="mt" />
+      <div class="row mt">
+        <label class="chk">Speed:
+          <select id="quality">
+            <option value="fast" selected>Fast (recommended)</option>
+            <option value="balanced">Balanced</option>
+            <option value="best">Best (slow on CPU)</option>
+          </select>
+        </label>
+        <label class="chk"><input id="speakers" type="checkbox" /> Detect speakers</label>
+        <span class="mut" id="speed-hint"></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>What you can do <span class="mut" style="font-weight:300">- it all happens after you bring a recording in</span></h2>
+      <div class="feats">
+        <div class="feat"><span class="fi">1</span><div><div class="ft">Vertical clips</div><div class="fd">9:16 + 1:1 with burned captions and per-clip copy.</div></div></div>
+        <div class="feat"><span class="fi">2</span><div><div class="ft">Key moments</div><div class="fd">Recap, clickable chapters, and quotes.</div></div></div>
+        <div class="feat"><span class="fi">3</span><div><div class="ft">YouTube package</div><div class="fd">Title, description with 0:00 chapters, and tags.</div></div></div>
+        <div class="feat"><span class="fi">4</span><div><div class="ft">Subtitles</div><div class="fd">Download SRT or WebVTT for any platform.</div></div></div>
+        <div class="feat"><span class="fi">5</span><div><div class="ft">Social posts</div><div class="fd">Farcaster + X drafts, brand rules baked in.</div></div></div>
+        <div class="feat"><span class="fi">6</span><div><div class="ft">Distribution bundle</div><div class="fd">One zip: clips, copy, recap, posts, transcript.</div></div></div>
+        <div class="feat"><span class="fi">7</span><div><div class="ft">Library search</div><div class="fd">Find a phrase across every past recording.</div></div></div>
+        <div class="feat"><span class="fi">8</span><div><div class="ft">Live session</div><div class="fd">Mark hot moments, live transcript, now-playing (below).</div></div></div>
+      </div>
+    </div>
 
     <div class="panel" id="dayof" style="margin-top:18px">
       <h2>Day-of casts <span class="mut" style="font-weight:300">- the 15-min warning + live-now posts</span></h2>
@@ -375,6 +483,33 @@ async function runSearch(){
 
 let PUB={farcaster:false,x:false,youtube:false};
 fetch("/api/studio/publishers").then(r=>r.json()).then(p=>{PUB=p;}).catch(()=>{});
+
+// --- modals (How it works + Setup) ---
+function openModal(id){ $(id).classList.add("show"); }
+function closeModal(id){ $(id).classList.remove("show"); }
+$("open-help").onclick=()=>openModal("help-overlay");
+$("open-setup").onclick=()=>{ openModal("setup-overlay"); loadCapabilities(); };
+document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>closeModal(b.dataset.close));
+document.querySelectorAll(".overlay").forEach(o=>o.onclick=(e)=>{ if(e.target===o) o.classList.remove("show"); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") document.querySelectorAll(".overlay.show").forEach(o=>o.classList.remove("show")); });
+
+// --- capabilities / setup ---
+let CAPS=null;
+async function loadCapabilities(){
+  try{
+    const c=await fetch("/api/studio/capabilities").then(r=>r.json()); CAPS=c;
+    $("cap-core").innerHTML=(c.core||[]).map(x=>`<div class="caprow"><span class="dot on"></span><span class="cl">${x.label}</span><span class="ch2">${(x.detail||"").replace(/</g,"&lt;")}</span></div>`).join("");
+    $("cap-integrations").innerHTML=(c.integrations||[]).map(x=>`<div class="caprow"><span class="dot ${x.on?"on":"off"}"></span><span class="cl">${x.label}</span><span class="cd">${x.on?"on":""}</span><span class="ch2">${x.on?"":x.hint.replace(/</g,"&lt;")}</span></div>`).join("");
+    const s=c.summary||{}; $("setup-count").textContent=`${s.integrations_on||0}/${s.integrations_total||0}`;
+    $("setup-sub").textContent=`Writing via ${s.llm||"fallback"}. ${s.integrations_on||0} of ${s.integrations_total||0} integrations on - turn on more below.`;
+  }catch(e){ $("cap-integrations").innerHTML=`<p class="mut">Could not load: ${e.message}</p>`; }
+}
+// load once on boot for the header pill + speed hint
+loadCapabilities().then(()=>{
+  if(CAPS){ const groq=(CAPS.integrations||[]).find(i=>i.key==="groq");
+    $("speed-hint").textContent=groq&&groq.on?"Groq is on - transcription is near-instant.":"Local transcription (no GROQ key). Fast model is good for most.";
+  }
+});
 
 // --- day-of casts ---
 let SESSIONS=[];
