@@ -211,6 +211,22 @@ async def download(project: str, kind: str):
     return FileResponse(str(path), media_type=entry[1], filename=path.name)
 
 
+@router.get("/{project}/subtitles/{fmt}")
+async def subtitles_download(project: str, fmt: str):
+    """Download the transcript as subtitles (srt | vtt) for any platform."""
+    from ..services import subtitles as subs
+    from fastapi.responses import PlainTextResponse
+    project_dir = _project_dir(project)
+    segments = _load_segments(project_dir)
+    try:
+        content = subs.build(segments, fmt)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    media = "text/vtt" if fmt.lower() == "vtt" else "application/x-subrip"
+    headers = {"Content-Disposition": f'attachment; filename="{project_dir.name}.{fmt.lower()}"'}
+    return PlainTextResponse(content, media_type=media, headers=headers)
+
+
 def _load_segments(project_dir: Path) -> list:
     cut = next((project_dir / "transcripts").glob("*.cut.json"), None)
     if not cut:
