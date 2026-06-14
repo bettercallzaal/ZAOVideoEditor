@@ -23,8 +23,13 @@ cd ZAOVideoEditor
 ```
 
 First run sets up a Python venv, installs deps, and opens the **Studio** in your
-browser at `http://localhost:8000`. Drop a recording (or paste a YouTube / Twitch /
-Restream / `.m3u8` / `.mp4` link) and go.
+browser at `http://localhost:8000`. The landing screen explains the flow, lists what
+you can do, and splits intake into **Upload a recording** / **Paste a link** cards.
+Two buttons sit in the top bar:
+
+- **How it works** - the flow plus the exact commands to run or share it.
+- **Setup** - a live report of what is enabled on this instance and the exact env var
+  to turn on each off feature (the header pill shows how many integrations are on).
 
 Only hard requirement: **ffmpeg** on your PATH (`brew install ffmpeg` /
 `sudo apt install ffmpeg`). `run.sh` checks and tells you if it is missing.
@@ -171,7 +176,8 @@ Granular endpoints: `/api/studio/process`, `/ingest`, `/{p}/render`, `/{p}/clips
 `/{p}/socials`, `/{p}/insights`, `/{p}/segments`, `/{p}/transcript`, `/{p}/cuts`,
 `/{p}/speakers`, `/{p}/speaker-stats`, `/glossary`, `/{p}/publish/{farcaster,x,youtube}`,
 `/{p}/youtube`, `/{p}/subtitles/{srt,vtt}`, `/{p}/bundle`, `/projects`, `/search`,
-`/{p}/zabal-export`, `/sessions`, `/casts/{day-of,this-week,static}`.
+`/{p}/zabal-export`, `/sessions`, `/casts/{day-of,this-week,static}`,
+`/capabilities` (what is enabled + how to enable more), `/publishers`.
 
 Livestream-day endpoints: `/golive`, `/live/start`, `/{p}/live/mark`, `/{p}/marks`,
 `/{p}/live/vod`, `/{p}/clips-from-marks`, `/{p}/live/audio-chunk`,
@@ -228,7 +234,7 @@ and smoke-tests the image on every PR.
 
 ```bash
 pip install -r backend/requirements-dev.txt   # light test deps
-python -m pytest                                # 234 tests
+python -m pytest                                # 241 tests
 cd web && npm install && npm run build          # the optional Next.js UI
 ```
 
@@ -256,9 +262,12 @@ Built and shipped:
 - Distribution outputs: subtitle export (SRT / WebVTT), a YouTube package (title +
   description with 0:00 chapters + tags), speaker talk-time analytics, and a one-zip
   distribution bundle (clips, copy, recap, posts, transcripts).
+- Onboarding + shareability: a guided landing (what it does, how it works, what you
+  can do) and a live **Setup** report (`/capabilities`) showing what is enabled and
+  how to turn on the rest.
 - Production packaging: Docker, optional access password, hardening knobs, CI that
   builds and smoke-tests the image.
-- 234 backend tests.
+- 241 backend tests.
 
 Needs an operator (not buildable here):
 
