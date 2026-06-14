@@ -634,6 +634,13 @@ async def publishers_status():
     return publishers.status()
 
 
+@router.get("/capabilities")
+async def capabilities_report():
+    """What this instance can do + how to enable the rest (powers the Setup panel)."""
+    from ..services import capabilities
+    return capabilities.get_capabilities()
+
+
 class PostText(BaseModel):
     text: str
 
