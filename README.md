@@ -55,10 +55,13 @@ A recording or link in, and out the other side:
 6. **Key moments** - one click extracts a recap, clickable chapters, and key quotes.
 7. **Social** - drafted Farcaster + X posts for the episode and each clip, brand rules
    baked in (no emojis / em dashes, "100+", exact casing).
-8. **Publish** - post to Farcaster / X / upload to YouTube directly (optional, see below).
-9. **Bundle** - pack the clips, copy, recap, posts, and transcripts into one zip to hand
-   off or bulk-post.
-10. **Library** - every past recording is listed; reopen and keep working. Search across
+8. **YouTube package** - a ready-to-paste title, description with 0:00 chapters, and tags.
+9. **Subtitles** - download the transcript as SRT or WebVTT for any platform.
+10. **Speakers** - rename detected speakers and see a per-speaker talk-time breakdown.
+11. **Publish** - post to Farcaster / X / upload to YouTube directly (optional, see below).
+12. **Bundle** - pack the clips, copy, recap, posts, and transcripts into one zip to hand
+    off or bulk-post.
+13. **Library** - every past recording is listed; reopen and keep working. Search across
     all recordings for a phrase and jump to the moment.
 
 Everything has Copy and Download buttons, so even with nothing configured you can
@@ -166,9 +169,9 @@ curl -F "file=@recording.mp4" -F "title=My Show" -F "clips=true" -F "socials=tru
 
 Granular endpoints: `/api/studio/process`, `/ingest`, `/{p}/render`, `/{p}/clips`,
 `/{p}/socials`, `/{p}/insights`, `/{p}/segments`, `/{p}/transcript`, `/{p}/cuts`,
-`/{p}/speakers`, `/glossary`, `/{p}/publish/{farcaster,x,youtube}`, `/{p}/bundle`,
-`/projects`, `/search`, `/{p}/zabal-export`, `/sessions`,
-`/casts/{day-of,this-week,static}`.
+`/{p}/speakers`, `/{p}/speaker-stats`, `/glossary`, `/{p}/publish/{farcaster,x,youtube}`,
+`/{p}/youtube`, `/{p}/subtitles/{srt,vtt}`, `/{p}/bundle`, `/projects`, `/search`,
+`/{p}/zabal-export`, `/sessions`, `/casts/{day-of,this-week,static}`.
 
 Livestream-day endpoints: `/golive`, `/live/start`, `/{p}/live/mark`, `/{p}/marks`,
 `/{p}/live/vod`, `/{p}/clips-from-marks`, `/{p}/live/audio-chunk`,
@@ -225,7 +228,7 @@ and smoke-tests the image on every PR.
 
 ```bash
 pip install -r backend/requirements-dev.txt   # light test deps
-python -m pytest                                # 216 tests
+python -m pytest                                # 234 tests
 cd web && npm install && npm run build          # the optional Next.js UI
 ```
 
@@ -250,10 +253,12 @@ Built and shipped:
   clip-marking, live transcription, auto-mark suggestions, now-playing-to-social, and
   an end-of-stream recap from the live transcript.
 - Cross-recording library search (find a phrase across every recording, jump to it).
-- Distribution bundle (one zip: clips, copy, recap, posts, transcripts).
+- Distribution outputs: subtitle export (SRT / WebVTT), a YouTube package (title +
+  description with 0:00 chapters + tags), speaker talk-time analytics, and a one-zip
+  distribution bundle (clips, copy, recap, posts, transcripts).
 - Production packaging: Docker, optional access password, hardening knobs, CI that
   builds and smoke-tests the image.
-- 216 backend tests.
+- 234 backend tests.
 
 Needs an operator (not buildable here):
 
