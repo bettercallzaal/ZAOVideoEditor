@@ -247,6 +247,7 @@
         <div class="panel" id="spkpanel" style="margin-top:14px">
           <h2>Speakers</h2>
           <div id="speakers-box"></div>
+          <div id="spkstats"></div>
           <button id="applyspk" class="ghost mini hidden">Apply names</button>
           <p class="mut" id="spknote">Re-process with "Detect speakers" on to label who is talking.</p>
         </div>
@@ -747,10 +748,22 @@ document.querySelectorAll("[data-batch]").forEach(b=>b.onclick=()=>{
   renderCuts(); renderTranscript(); saveCuts();
 });
 
+async function loadSpeakerStats(){
+  const box=$("spkstats"); if(!box) return; box.innerHTML="";
+  try{
+    const r=await fetch(`/api/studio/${project}/speaker-stats`).then(x=>x.json());
+    if(!r.speakers||!r.speakers.length) return;
+    box.innerHTML='<div class="mut mt">Talk time</div>'+r.speakers.map(s=>{
+      const pct=Math.round((s.share||0)*100);
+      return `<div class="cutrow"><span class="spk">${s.speaker}</span><span style="flex:1"><span style="display:inline-block;height:8px;background:var(--cyan);width:${pct}%;border-radius:4px;min-width:2px"></span></span><span class="mut num">${pct}% - ${fmt(s.seconds)} (${s.segments})</span></div>`;
+    }).join("");
+  }catch(_){}
+}
 function renderSpeakers(speakers){
   const box=$("speakers-box"); box.innerHTML="";
-  if(!speakers||!speakers.length){ $("spknote").classList.remove("hidden"); $("applyspk").classList.add("hidden"); return; }
+  if(!speakers||!speakers.length){ $("spknote").classList.remove("hidden"); $("applyspk").classList.add("hidden"); $("spkstats").innerHTML=""; return; }
   $("spknote").classList.add("hidden"); $("applyspk").classList.remove("hidden");
+  loadSpeakerStats();
   speakers.forEach(s=>{
     const r=document.createElement("div"); r.className="spkrow";
     r.innerHTML=`<span class="spk">${s}</span><input type="text" data-spk="${s}" placeholder="real name" />`;
