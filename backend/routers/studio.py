@@ -595,6 +595,19 @@ async def serve_input_video(project: str):
                         headers={"Accept-Ranges": "bytes"})
 
 
+@router.get("/{project}/youtube")
+async def youtube_package(project: str):
+    """A ready-to-paste YouTube title, description (with 0:00 chapters), and tags."""
+    from ..services import youtube_package as yp
+    project_dir = _project_dir(project)
+    insights_file = project_dir / "metadata" / "insights.json"
+    if not insights_file.exists():
+        raise HTTPException(400, "Extract key moments first - the recap and chapters drive the description")
+    insights = json.loads(insights_file.read_text())
+    footer = "Watch ZABAL Gamez live at http://zabalgames.com/live"
+    return yp.build_package(insights, title=_project_title(project_dir), footer=footer)
+
+
 def _project_title(project_dir: Path) -> str:
     pj = project_dir / "project.json"
     if pj.exists():
