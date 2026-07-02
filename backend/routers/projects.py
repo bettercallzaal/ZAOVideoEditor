@@ -17,6 +17,32 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 PROJECTS_DIR = Path(__file__).parent.parent.parent / "projects"
 
+# Shared validation constants
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm"}
+MAX_FILE_SIZE = 10 * 1024 * 1024 * 1024  # 10 GB limit
+MIN_DISK_FREE = 1024 * 1024 * 1024  # 1 GB required free
+
+
+def validate_video_upload(file_path: Path, max_size: int = MAX_FILE_SIZE) -> None:
+    """Validate video file extension and check disk space.
+
+    Args:
+        file_path: Path where file will be written
+        max_size: Maximum allowed file size in bytes
+
+    Raises:
+        HTTPException: If validation fails
+    """
+    ext = Path(file_path).suffix.lower()
+    if ext not in ALLOWED_VIDEO_EXTENSIONS:
+        raise HTTPException(400, f"Unsupported format: {ext}. Allowed: {', '.join(sorted(ALLOWED_VIDEO_EXTENSIONS))}")
+
+    # Check available disk space
+    import shutil as _shutil
+    disk_usage = _shutil.disk_usage(str(file_path.parent))
+    if disk_usage.free < MIN_DISK_FREE:
+        raise HTTPException(507, f"Insufficient disk space (need at least {MIN_DISK_FREE / (1024**3):.1f}GB free)")
+
 
 def get_project_dir(name: str) -> Path:
     """Resolve a project directory for the given name.
@@ -167,22 +193,17 @@ async def upload_main_video(name: str, file: UploadFile = File(...)):
     if not project_dir.exists():
         raise HTTPException(404, "Project not found")
 
+    input_dir = project_dir / "input"
     ext = Path(file.filename).suffix.lower()
-    if ext not in [".mp4", ".mov", ".mkv", ".webm"]:
-        raise HTTPException(400, f"Unsupported format: {ext}")
+    dest = input_dir / f"main{ext}"
+
+    # Validate extension and disk space
+    validate_video_upload(dest, max_size=MAX_FILE_SIZE)
 
     # Remove any existing main video
-    input_dir = project_dir / "input"
     for existing in input_dir.glob("main.*"):
         existing.unlink()
 
-    # Check available disk space (require at least 1GB free)
-    import shutil as _shutil
-    disk_usage = _shutil.disk_usage(str(input_dir))
-    if disk_usage.free < 1024 * 1024 * 1024:
-        raise HTTPException(507, "Insufficient disk space (need at least 1GB free)")
-
-    MAX_FILE_SIZE = 10 * 1024 * 1024 * 1024  # 10 GB limit
     dest = input_dir / f"main{ext}"
     total_written = 0
     with open(dest, "wb") as f:
@@ -232,15 +253,26 @@ async def upload_intro(name: str, file: UploadFile = File(...)):
     if not project_dir.exists():
         raise HTTPException(404, "Project not found")
 
+    input_dir = project_dir / "input"
     ext = Path(file.filename).suffix.lower()
-    dest = project_dir / "input" / f"intro{ext}"
+    dest = input_dir / f"intro{ext}"
+
+    # Validate extension and disk space (same as main video)
+    validate_video_upload(dest, max_size=MAX_FILE_SIZE)
 
     # Remove existing intros
-    for existing in (project_dir / "input").glob("intro.*"):
+    for existing in input_dir.glob("intro.*"):
         existing.unlink()
 
+    dest = input_dir / f"intro{ext}"
+    total_written = 0
     with open(dest, "wb") as f:
         while chunk := await file.read(1024 * 1024):
+            total_written += len(chunk)
+            if total_written > MAX_FILE_SIZE:
+                f.close()
+                dest.unlink()
+                raise HTTPException(413, "File too large (max 10 GB)")
             f.write(chunk)
 
     return {"status": "uploaded", "type": "intro"}
@@ -253,15 +285,26 @@ async def upload_outro(name: str, file: UploadFile = File(...)):
     if not project_dir.exists():
         raise HTTPException(404, "Project not found")
 
+    input_dir = project_dir / "input"
     ext = Path(file.filename).suffix.lower()
-    dest = project_dir / "input" / f"outro{ext}"
+    dest = input_dir / f"outro{ext}"
+
+    # Validate extension and disk space (same as main video)
+    validate_video_upload(dest, max_size=MAX_FILE_SIZE)
 
     # Remove existing outros
-    for existing in (project_dir / "input").glob("outro.*"):
+    for existing in input_dir.glob("outro.*"):
         existing.unlink()
 
+    dest = input_dir / f"outro{ext}"
+    total_written = 0
     with open(dest, "wb") as f:
         while chunk := await file.read(1024 * 1024):
+            total_written += len(chunk)
+            if total_written > MAX_FILE_SIZE:
+                f.close()
+                dest.unlink()
+                raise HTTPException(413, "File too large (max 10 GB)")
             f.write(chunk)
 
     return {"status": "uploaded", "type": "outro"}
