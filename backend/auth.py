@@ -51,21 +51,23 @@ class AccessPasswordMiddleware(BaseHTTPMiddleware):
         if request.url.path in _OPEN_PATHS:
             return await call_next(request)
 
-        # If password is configured, check it
+        # TERMINAL PASSWORD CHECK: when a password is configured, it must be
+        # validated. A wrong/missing credential with a configured password is
+        # ALWAYS rejected and never falls through to ALLOW_OPEN_LOCAL.
         if password:
             auth = request.headers.get("Authorization", "")
             if _check(auth, password):
                 return await call_next(request)
-        # If no password and dev mode is enabled, allow it
-        elif _allow_open_local():
-            return await call_next(request)
-        # No password configured and dev mode disabled: fail closed (production default)
-        else:
+            # Password check failed - reject immediately (don't fall through)
             if request.headers.get("accept", "").find("text/html") != -1:
                 return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="ZAO Studio"'})
             return JSONResponse(status_code=401, content={"detail": "Authentication required"})
 
-        # Browser-native prompt for page loads; JSON for API clients.
+        # No password configured: check dev mode override
+        if _allow_open_local():
+            return await call_next(request)
+
+        # No password configured and dev mode disabled: fail closed (production default)
         if request.headers.get("accept", "").find("text/html") != -1:
             return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="ZAO Studio"'})
         return JSONResponse(status_code=401, content={"detail": "Authentication required"})
