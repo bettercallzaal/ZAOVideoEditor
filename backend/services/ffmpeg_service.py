@@ -482,6 +482,13 @@ def _find_font(bold: bool = True) -> str:
             "/System/Library/Fonts/Helvetica Bold.ttc",
             "/System/Library/Fonts/HelveticaNeue.ttc",
             "/System/Library/Fonts/SFNS.ttf",
+            # Linux. Every candidate above is macOS-only, so the shipped Docker
+            # image found nothing, fell back to Pillow's ~11px bitmap default, and
+            # rendered a 1080p title card in a font you could not read.
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+            "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
         ]
         for path in bold_candidates:
             if os.path.exists(path):
@@ -491,6 +498,10 @@ def _find_font(bold: bool = True) -> str:
         "/System/Library/Fonts/SFNS.ttf",
         "/Library/Fonts/Arial.ttf",
         "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
     ]
     for path in candidates:
         if os.path.exists(path):

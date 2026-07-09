@@ -5,6 +5,7 @@ FROM python:3.11-slim
 
 # ffmpeg for all media work; git/curl for optional installs.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    fonts-dejavu-core \
     ffmpeg curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 

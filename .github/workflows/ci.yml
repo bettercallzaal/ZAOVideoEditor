@@ -17,7 +17,7 @@ jobs:
         # The render tests measure real pixels. Without ffmpeg they all skip and
         # CI goes green over an unverified renderer - the exact fake signal the
         # verifier exists to remove.
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
       - name: Install test deps
         run: pip install -r backend/requirements-dev.txt
       - name: Byte-compile backend
