@@ -11,14 +11,27 @@ from pathlib import Path
 from difflib import SequenceMatcher
 
 
+# Whisper's escape hatch from a repetition loop is the temperature fallback: when
+# a chunk's compression ratio exceeds compression_ratio_threshold (the signature of
+# repeated text), it retries at the next temperature. That only happens when
+# `temperature` is a SEQUENCE. Passing the scalar 0.0 silently disables the whole
+# mechanism, and compression_ratio_threshold becomes decorative.
+#
+# A real 54-minute space transcribed with a scalar temperature emitted "So, yeah."
+# for fifty minutes straight. condition_on_previous_text=True then fed the repeated
+# text back in as context and cemented the loop. Both are fixed here.
+TEMPERATURE_FALLBACK = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
+
 # Each pass uses different parameters to capture different aspects
 PASS_CONFIGS = [
     {
         "name": "precise",
         "beam_size": 5,
         "best_of": 5,
-        "temperature": 0.0,
-        "condition_on_previous_text": True,
+        "temperature": TEMPERATURE_FALLBACK,
+        # False for long-form audio. Feeding a model its own looping output back
+        # as context is how a stutter becomes fifty minutes of one sentence.
+        "condition_on_previous_text": False,
         "no_speech_threshold": 0.6,
         "compression_ratio_threshold": 2.4,
     },
@@ -26,7 +39,7 @@ PASS_CONFIGS = [
         "name": "exploratory",
         "beam_size": 8,
         "best_of": 8,
-        "temperature": 0.2,
+        "temperature": TEMPERATURE_FALLBACK,
         "condition_on_previous_text": False,
         "no_speech_threshold": 0.5,
         "compression_ratio_threshold": 2.6,
@@ -35,8 +48,8 @@ PASS_CONFIGS = [
         "name": "aggressive",
         "beam_size": 5,
         "best_of": 5,
-        "temperature": 0.0,
-        "condition_on_previous_text": True,
+        "temperature": TEMPERATURE_FALLBACK,
+        "condition_on_previous_text": False,
         "no_speech_threshold": 0.4,
         "compression_ratio_threshold": 2.8,
     },
@@ -47,6 +60,18 @@ def _build_vocab_prompt() -> tuple[str | None, str | None]:
     """Build initial_prompt and hotwords from the correction dictionary.
 
     Returns (initial_prompt, hotwords) for faster-whisper.
+
+    initial_prompt is deliberately None. Whisper treats it as preceding *speech*,
+    not as an instruction, so a bare term list gets decoded and echoed back into
+    the transcript: real recordings opened with
+    "Glossary, ZABAL, ZAO Glossary, ZABAL, ZAO" and, with the old
+    condition_on_previous_text=True, that echo seeded a repetition loop the model
+    never escaped. The captions we blamed on hallucination -
+    "SongJam, Farcaster, Ohnahji, Saltorius, SongJam, WaveWarZ" - were the prompt
+    being read back verbatim.
+
+    hotwords biases token probabilities toward those spellings without ever being
+    decoded as speech, which is what we actually wanted from the glossary.
     """
     try:
         from .dictionary import load_dictionary
@@ -55,16 +80,9 @@ def _build_vocab_prompt() -> tuple[str | None, str | None]:
         if not corrections:
             return None, None
 
-        # Unique correct terms for the prompt
         terms = sorted(set(corrections.values()))
-
-        # initial_prompt: glossary format gives Whisper spelling context
-        initial_prompt = "Glossary: " + ", ".join(terms)
-
-        # hotwords: space-separated terms that boost token probabilities
         hotwords = ", ".join(terms)
-
-        return initial_prompt, hotwords
+        return None, hotwords
     except Exception:
         return None, None
 
@@ -77,14 +95,14 @@ def _run_single_pass(model, audio_path: str, config: dict, on_progress=None) -> 
         audio_path,
         beam_size=config["beam_size"],
         best_of=config.get("best_of", config["beam_size"]),
-        temperature=config.get("temperature", 0.0),
+        temperature=config.get("temperature", TEMPERATURE_FALLBACK),
         word_timestamps=True,
         vad_filter=True,
         vad_parameters={
             "min_silence_duration_ms": 300,
             "speech_pad_ms": 200,
         },
-        condition_on_previous_text=config.get("condition_on_previous_text", True),
+        condition_on_previous_text=config.get("condition_on_previous_text", False),
         no_speech_threshold=config.get("no_speech_threshold", 0.6),
         compression_ratio_threshold=config.get("compression_ratio_threshold", 2.4),
         initial_prompt=initial_prompt,

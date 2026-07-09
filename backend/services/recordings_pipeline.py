@@ -56,6 +56,32 @@ def _cut_transcript_md(segments: list, title: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def repetition_ratio(segments: list) -> float:
+    """Fraction of segments identical to the one before them.
+
+    Whisper collapses into a repetition loop on long audio and emits the same
+    sentence for tens of minutes. Nothing downstream notices: the segment count
+    looks healthy, the captions are well-formed, the video renders, and the render
+    verifier passes because the pixels are fine. Only the words are wrong.
+
+    A real conversation repeats a line occasionally ("yeah", "right"); it does not
+    repeat one 500 times. Measured on a real 54-minute space that looped from the
+    4-minute mark: 0.967. A healthy 3-minute transcript of the same recording: 0.0.
+    """
+    texts = [(s.get("text") or "").strip() for s in segments]
+    texts = [t for t in texts if t]
+    if len(texts) < 10:
+        return 0.0
+    dup = sum(1 for i in range(1, len(texts)) if texts[i] == texts[i - 1])
+    return dup / len(texts)
+
+
+# Above this, the transcript is a repetition loop rather than a conversation.
+# The real failure scored 0.967 and a healthy transcript 0.0, so 0.10 separates
+# them by ~10x while tolerating a genuinely repetitive stretch.
+REPETITION_LIMIT = 0.10
+
+
 def _dedupe_flags(flags: list) -> list:
     seen, out = set(), []
     for f in flags:
@@ -201,6 +227,11 @@ def _finish_pipeline(segments, duration, title, out_dir, readable_llm,
 
     Shared by the Whisper path and the YouTube-captions fast path.
     """
+    rep = repetition_ratio(segments)
+    if rep >= REPETITION_LIMIT:
+        progress(79, f"WARNING: transcript looks like a repetition loop "
+                     f"({rep:.0%} of segments repeat the previous one)")
+
     progress(80, "Applying brand glossary...")
     corr = load_corrections()
     all_flags, all_changes = [], []
@@ -238,6 +269,10 @@ def _finish_pipeline(segments, duration, title, out_dir, readable_llm,
         # None when speakers were not requested or diarization succeeded.
         "speaker_error": speaker_error,
         "speakers_detected": any(s.get("speaker") for s in segments),
+        # Whisper loops on long audio. Nothing else in this pipeline notices:
+        # the segment count looks healthy and the captions are well-formed.
+        "repetition_ratio": round(rep, 4),
+        "repetition_collapse": rep >= REPETITION_LIMIT,
     }
 
     if out_dir:

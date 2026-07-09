@@ -214,6 +214,17 @@ def main():
     segments = result["segments"]
     log(f"{len(segments)} segments")
 
+    # Whisper loops on long audio and emits one sentence for tens of minutes. The
+    # segment count still looks healthy and the render still verifies, because the
+    # pixels are fine and only the words are wrong. Stop before the encode.
+    if result.get("repetition_collapse"):
+        raise SystemExit(
+            f"TRANSCRIPT COLLAPSED: {result['repetition_ratio']:.0%} of segments repeat "
+            f"the previous one. This is a Whisper repetition loop, not a conversation.\n"
+            f"Refusing to render. Try --quality best, or transcribe with Groq "
+            f"(set GROQ_API_KEY)."
+        )
+
     # Diarization is deliberately non-fatal, so an unmet dependency would
     # otherwise show up only as captions that never say who is talking.
     if args.speakers and result.get("speaker_error"):
