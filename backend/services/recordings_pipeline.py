@@ -98,17 +98,27 @@ def _transcribe(audio_path: str, quality: str, engine: str, progress) -> dict:
     )
 
 
-def _detect_speakers(audio_path: str, segments: list, progress) -> list:
-    """Best-effort diarization -> speaker labels on segments. Never blocks."""
+def _detect_speakers(audio_path: str, segments: list, progress) -> tuple[list, Optional[str]]:
+    """Best-effort diarization -> speaker labels. Never blocks. Returns (segments, error).
+
+    Diarization needs pyannote.audio, torch, and a gated HF_TOKEN, none of which
+    are guaranteed. Failing the whole transcript over a missing optional model
+    would be wrong. But swallowing the reason is worse: a caller who explicitly
+    asked for speakers used to get unlabeled segments and no indication why, and
+    a print() into a background worker's stdout reaches nobody.
+
+    So: still non-fatal, but the reason comes back to the caller.
+    """
     try:
         from .diarization import diarize_audio, assign_speakers_to_segments
         progress(78, "Detecting speakers...")
         turns = diarize_audio(audio_path)
-        if turns:
-            return assign_speakers_to_segments(segments, turns)
+        if not turns:
+            return segments, "diarization produced no speaker turns"
+        return assign_speakers_to_segments(segments, turns), None
     except Exception as e:
-        print(f"Speaker detection skipped: {e}")
-    return segments
+        progress(78, f"Speaker detection unavailable: {e}")
+        return segments, str(e)
 
 
 def process_recording(media_path: str, title: str = "", quality: str = "fast",
@@ -145,16 +155,18 @@ def process_recording(media_path: str, title: str = "", quality: str = "fast",
             progress(12, "Fetching YouTube captions...")
             data = fetch_captions(captions_url)
             segments = data.get("segments", [])
+            speaker_error = None
             if detect_speakers:
                 audio_path, tmp = _ensure_audio(media)
                 try:
-                    segments = _detect_speakers(str(audio_path), segments, progress)
+                    segments, speaker_error = _detect_speakers(str(audio_path), segments, progress)
                 finally:
                     if tmp and tmp.exists():
                         tmp.unlink()
             duration = data.get("duration") or (segments[-1].get("end", 0.0) if segments else 0.0)
             return _finish_pipeline(segments, duration, title, out_dir, readable_llm,
-                                    plan_cuts, suggest_falsestarts, media, progress)
+                                    plan_cuts, suggest_falsestarts, media, progress,
+                                    speaker_error=speaker_error)
         except Exception as e:
             progress(10, f"No usable captions ({e}); transcribing instead...")
 
@@ -168,8 +180,9 @@ def process_recording(media_path: str, title: str = "", quality: str = "fast",
     try:
         data = _transcribe(str(audio_path), quality, engine, progress)
         segments = data.get("segments", [])
+        speaker_error = None
         if detect_speakers:
-            segments = _detect_speakers(str(audio_path), segments, progress)
+            segments, speaker_error = _detect_speakers(str(audio_path), segments, progress)
     finally:
         _TRANSCRIBE_GATE.release()
         if tmp and tmp.exists():
@@ -177,11 +190,13 @@ def process_recording(media_path: str, title: str = "", quality: str = "fast",
 
     duration = data.get("duration") or (segments[-1].get("end", 0.0) if segments else 0.0)
     return _finish_pipeline(segments, duration, title, out_dir, readable_llm,
-                            plan_cuts, suggest_falsestarts, media, progress)
+                            plan_cuts, suggest_falsestarts, media, progress,
+                            speaker_error=speaker_error)
 
 
 def _finish_pipeline(segments, duration, title, out_dir, readable_llm,
-                     plan_cuts, suggest_falsestarts, media, progress):
+                     plan_cuts, suggest_falsestarts, media, progress,
+                     speaker_error=None):
     """Stages after transcription: glossary correct -> cut plan -> readable -> write.
 
     Shared by the Whisper path and the YouTube-captions fast path.
@@ -215,6 +230,9 @@ def _finish_pipeline(segments, duration, title, out_dir, readable_llm,
         "review_flags": review_flags,
         "glossary_changes": all_changes,
         "edit_sheet": edit_sheet,
+        # None when speakers were not requested or diarization succeeded.
+        "speaker_error": speaker_error,
+        "speakers_detected": any(s.get("speaker") for s in segments),
     }
 
     if out_dir:

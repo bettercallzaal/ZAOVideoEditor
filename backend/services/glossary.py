@@ -16,25 +16,37 @@ from pathlib import Path
 from typing import Optional
 
 
-# Point this at the canonical zabalgames data/transcript-corrections.json via
-# STUDIO_GLOSSARY_PATH so the Studio reads AND writes the team's living glossary
-# (the "fix a word once, it learns" file). Defaults to the bundled seed copy.
-CORRECTIONS_PATH = Path(
-    os.environ.get("STUDIO_GLOSSARY_PATH", "").strip()
-    or (Path(__file__).parent.parent / "data" / "transcript-corrections.json")
-)
+BUNDLED_CORRECTIONS_PATH = Path(__file__).parent.parent / "data" / "transcript-corrections.json"
 
 
-def load_corrections(path: Optional[Path] = None) -> dict:
-    """Load corrections, normalizing the two on-disk shapes into one internal form.
+def external_corrections_path() -> Optional[Path]:
+    """The team's living glossary, if STUDIO_GLOSSARY_PATH points at one.
+
+    Read at call time, not import time, so tests and long-lived processes can
+    change it without reimporting the module.
+    """
+    raw = os.environ.get("STUDIO_GLOSSARY_PATH", "").strip()
+    return Path(raw) if raw else None
+
+
+# The write target for `add_safe_correction`: the team's living file when one is
+# configured, otherwise the bundled seed. Reads layer both (see load_corrections).
+def _write_target() -> Path:
+    return external_corrections_path() or BUNDLED_CORRECTIONS_PATH
+
+
+# Back-compat alias. Prefer _write_target()/BUNDLED_CORRECTIONS_PATH in new code.
+CORRECTIONS_PATH = _write_target()
+
+
+def _load_one(p: Path) -> dict:
+    """Load and normalize a single glossary file.
 
     Internal form: {"safe": {wrong_lower: right}, "review": [{term, to, note}]}.
-    Supports BOTH:
+    Supports BOTH on-disk shapes:
       - the bundled seed: safe = {wrong: right} dict
       - the zabalgames canonical file: safe/review = [{from, to, note}] lists
-    so STUDIO_GLOSSARY_PATH can point straight at the team's file.
     """
-    p = path or CORRECTIONS_PATH
     if not p.exists():
         return {"safe": {}, "review": []}
     with open(p) as f:
@@ -53,6 +65,32 @@ def load_corrections(path: Optional[Path] = None) -> dict:
             if term:
                 review.append({"term": term, "to": r.get("to"), "note": r.get("note", "")})
     return {"safe": safe, "review": review}
+
+
+def load_corrections(path: Optional[Path] = None) -> dict:
+    """Load the glossary. Layers the bundled seed under the team's living file.
+
+    An explicit `path` loads exactly that file and nothing else.
+
+    Otherwise the bundled seed is the base and STUDIO_GLOSSARY_PATH is an overlay
+    that wins on conflict. Layering matters: the two files are not supersets of
+    each other. The bundled seed carries WaveWarZ, COC Concertz, SongJam,
+    FISHBOWLZ and friends; the zabalgames file carries POIDH, Neynar, Farcaster
+    and the Zaal/Zabal mishears. Simply pointing STUDIO_GLOSSARY_PATH at the
+    canonical file - which the old docstring invited - silently dropped every
+    rule the canonical file happened not to duplicate.
+    """
+    if path is not None:
+        return _load_one(path)
+
+    merged = _load_one(BUNDLED_CORRECTIONS_PATH)
+    external = external_corrections_path()
+    if external:
+        overlay = _load_one(external)
+        merged["safe"].update(overlay["safe"])
+        seen = {r["term"].lower() for r in merged["review"]}
+        merged["review"].extend(r for r in overlay["review"] if r["term"].lower() not in seen)
+    return merged
 
 
 def _whole_word_pattern(term: str) -> re.Pattern:
@@ -201,7 +239,7 @@ def add_safe_correction(wrong: str, right: str, path: Optional[Path] = None) -> 
     This is how the UI's 'fix a term' makes a correction stick for every future
     recording.
     """
-    p = path or CORRECTIONS_PATH
+    p = path or _write_target()
     wrong = (wrong or "").strip()
     right = (right or "").strip()
     if not wrong or not right:

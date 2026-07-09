@@ -153,6 +153,8 @@ def main():
                    help="Burn captions into the picture. Needs libass. YouTube does not need this.")
     p.add_argument("--style", default="brand_dark",
                    help="Caption style: classic, box, bold_pop, highlight, brand_light, brand_dark")
+    p.add_argument("--speakers", action="store_true",
+                   help="Label who is talking. Needs pyannote.audio, torch, and HF_TOKEN.")
     args = p.parse_args()
 
     if not args.source and not args.space_id:
@@ -204,10 +206,22 @@ def main():
     result = rp.process_recording(
         str(source), title=title, quality=args.quality, engine="auto",
         out_dir=str(out_dir / "transcripts"), readable_llm=False,
+        detect_speakers=args.speakers,
         on_progress=lambda pct, msg: log(f"  {pct}% {msg}"),
     )
     segments = result["segments"]
     log(f"{len(segments)} segments")
+
+    # Diarization is deliberately non-fatal, so an unmet dependency would
+    # otherwise show up only as captions that never say who is talking.
+    if args.speakers and result.get("speaker_error"):
+        log(f"WARNING: --speakers requested but diarization failed: {result['speaker_error']}")
+        log("WARNING: captions will not be speaker-labelled. Install pyannote.audio + torch")
+        log("WARNING: and set HF_TOKEN, or drop --speakers.")
+
+    if result.get("glossary_changes"):
+        for ch in result["glossary_changes"]:
+            log(f"  glossary: {ch['from']!r} -> {ch['to']!r} x{ch['count']}")
 
     captions = generate_captions_from_segments(segments, style=args.style)
     srt_path = out_dir / f"{slug}.srt"
