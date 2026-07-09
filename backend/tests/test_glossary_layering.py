@@ -143,3 +143,94 @@ def test_detect_speakers_reports_empty_turns(monkeypatch):
     out, err = rp._detect_speakers("a.wav", segs, lambda p, m: None)
     assert out == segs
     assert err == "diarization produced no speaker turns"
+
+
+# --- word-level tokens (captions are built from these, not from seg["text"]) --
+
+def _w(word, start, end):
+    return {"word": word, "start": start, "end": end}
+
+
+def test_word_tokens_are_corrected():
+    """Captions come from seg["words"]. Correcting only seg["text"] ships a video
+    whose description says POIDH and whose captions say Poid."""
+    from backend.services.glossary import correct_word_tokens
+
+    words = [_w(" I", 0, 0.2), _w(" like", 0.2, 0.4), _w(" Poid", 0.4, 0.8)]
+    out, changes = correct_word_tokens(words, {"safe": {"poid": "POIDH"}, "review": []})
+    assert [w["word"] for w in out] == [" I", " like", " POIDH"]
+    assert changes
+
+
+def test_word_token_correction_preserves_timing():
+    from backend.services.glossary import correct_word_tokens
+
+    words = [_w(" Poid", 1.0, 1.5)]
+    out, _ = correct_word_tokens(words, {"safe": {"poid": "POIDH"}, "review": []})
+    assert out[0]["start"] == 1.0 and out[0]["end"] == 1.5
+
+
+def test_word_token_correction_keeps_punctuation():
+    from backend.services.glossary import correct_word_tokens
+
+    words = [_w(" Poid,", 0, 1), _w(" Poid.", 1, 2)]
+    out, _ = correct_word_tokens(words, {"safe": {"poid": "POIDH"}, "review": []})
+    assert [w["word"] for w in out] == [" POIDH,", " POIDH."]
+
+
+def test_multiword_rule_spanning_two_tokens():
+    """'exaball games' -> 'ZABAL Gamez' spans two tokens; a per-token pass misses it."""
+    from backend.services.glossary import correct_word_tokens
+
+    words = [_w(" ExaBall", 1.0, 1.4), _w(" Games", 1.4, 1.9), _w(" rocks", 1.9, 2.2)]
+    corr = {"safe": {"exaball games": "ZABAL Gamez", "exaball": "ZABAL"}, "review": []}
+    out, changes = correct_word_tokens(words, corr)
+
+    assert [w["word"] for w in out] == [" ZABAL Gamez", " rocks"]
+    assert out[0]["start"] == 1.0 and out[0]["end"] == 1.9, "merged token must span both"
+    assert any(c["from"] == "exaball games" for c in changes)
+
+
+def test_multiword_rule_that_collapses_word_count():
+    from backend.services.glossary import correct_word_tokens
+
+    words = [_w(" wave", 0.0, 0.3), _w(" wars", 0.3, 0.7)]
+    corr = {"safe": {"wave wars": "WaveWarZ"}, "review": []}
+    out, _ = correct_word_tokens(words, corr)
+    assert [w["word"] for w in out] == [" WaveWarZ"]
+    assert out[0]["end"] == 0.7
+
+
+def test_bare_token_rule_still_applies_after_multiword_miss():
+    from backend.services.glossary import correct_word_tokens
+
+    words = [_w(" ExaBall", 0, 1), _w(" ecosystem", 1, 2)]
+    corr = {"safe": {"exaball games": "ZABAL Gamez", "exaball": "ZABAL"}, "review": []}
+    out, _ = correct_word_tokens(words, corr)
+    assert [w["word"] for w in out] == [" ZABAL", " ecosystem"]
+
+
+def test_empty_words_is_safe():
+    from backend.services.glossary import correct_word_tokens
+    assert correct_word_tokens([], {"safe": {}, "review": []}) == ([], [])
+
+
+def test_srt_and_description_agree_on_brand_names():
+    """The end-to-end invariant that was violated: metadata said POIDH, captions
+    said Poid."""
+    from backend.services.caption_gen import generate_captions_from_segments, generate_srt
+    from backend.services.glossary import correct_transcript_text, correct_word_tokens
+
+    corr = {"safe": {"poid": "POIDH"}, "review": []}
+    segs = [{
+        "start": 0.0, "end": 1.0, "text": "I like Poid",
+        "words": [_w(" I", 0, 0.2), _w(" like", 0.2, 0.5), _w(" Poid", 0.5, 1.0)],
+    }]
+    for s in segs:
+        s["text"] = correct_transcript_text(s["text"], corr)["text"]
+        s["words"], _ = correct_word_tokens(s["words"], corr)
+
+    srt = generate_srt(generate_captions_from_segments(segs))
+    assert "POIDH" in srt
+    assert "Poid " not in srt and not srt.rstrip().endswith("Poid")
+    assert "POIDH" in segs[0]["text"]

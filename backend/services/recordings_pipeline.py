@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .whisper_service import transcribe_audio
-from .glossary import load_corrections, correct_transcript_text
+from .glossary import load_corrections, correct_transcript_text, correct_word_tokens
 from .readable_pass import make_readable
 from .cut_planner import build_edit_sheet
 
@@ -209,6 +209,11 @@ def _finish_pipeline(segments, duration, title, out_dir, readable_llm,
         seg["text"] = res["text"]
         all_flags.extend(res["review_flags"])
         all_changes.extend(res["safe_changes"])
+        # Captions are built from the word tokens, not from seg["text"]. Correcting
+        # only the text ships a video whose description says POIDH and whose
+        # captions say Poid.
+        if seg.get("words"):
+            seg["words"], _ = correct_word_tokens(seg["words"], corr)
     review_flags = _dedupe_flags(all_flags)
 
     progress(85, "Planning cuts...")

@@ -15,6 +15,7 @@ full-length space is encoded exactly once.
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -84,16 +85,41 @@ def _wave_geometry(width: int, height: int) -> tuple:
     )
 
 
+# Elementary streams with no container index. ffprobe reports a duration for
+# these, but it is a guess from the bitrate, not a fact.
+_RAW_FORMATS = {"aac", "mp3", "ac3", "eac3", "dts", "flac", "h264", "hevc"}
+
+
+def _decoded_duration(media_path: str) -> Optional[float]:
+    """Decode the audio and read the clock. Slow-ish but exact (~1.6s for 54 min)."""
+    result = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-nostats", "-i", media_path,
+         "-map", "0:a", "-f", "null", "-"],
+        capture_output=True, text=True,
+    )
+    times = re.findall(r"time=(\d+):(\d\d):(\d\d)\.(\d+)", result.stderr)
+    if not times:
+        return None
+    h, m, s, frac = times[-1]
+    return int(h) * 3600 + int(m) * 60 + int(s) + float(f"0.{frac}")
+
+
 def probe_streams(media_path: str) -> dict:
     """Return {'has_video': bool, 'has_audio': bool, 'duration': float}.
 
     Unlike get_video_params(), this never raises on audio-only input. That is
     the whole point: callers need to *detect* audio-only, not crash on it.
+
+    A Juke space export is often a raw AAC elementary stream inside a .mp4 name.
+    It carries no container index, so ffprobe estimates duration from the bitrate
+    and can be minutes off - one real 54:10 recording reported 57:59. Every
+    downstream number (the card footer, --minutes, the render verifier's expected
+    duration) inherits that error, so decode when the stream duration is missing.
     """
     cmd = [
         "ffprobe", "-v", "error",
-        "-show_entries", "stream=codec_type",
-        "-show_entries", "format=duration",
+        "-show_entries", "stream=codec_type,duration",
+        "-show_entries", "format=duration,format_name",
         "-of", "json", media_path,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -101,11 +127,23 @@ def probe_streams(media_path: str) -> dict:
         raise RuntimeError(f"ffprobe failed on {media_path}: {result.stderr.strip()}")
 
     info = json.loads(result.stdout)
-    kinds = {s.get("codec_type") for s in info.get("streams", [])}
+    streams = info.get("streams", [])
+    kinds = {s.get("codec_type") for s in streams}
+    fmt = info.get("format", {})
+
     try:
-        duration = float(info.get("format", {}).get("duration", 0.0))
+        duration = float(fmt.get("duration", 0.0))
     except (TypeError, ValueError):
         duration = 0.0
+
+    # A raw stream reports a duration on both the format and the stream, but both
+    # come from the same bitrate estimate, so neither is evidence. The format name
+    # is the only signal. (Checking "is the stream duration missing?" never fires.)
+    formats = set((fmt.get("format_name") or "").split(","))
+    if "audio" in kinds and formats & _RAW_FORMATS:
+        exact = _decoded_duration(media_path)
+        if exact:
+            duration = exact
 
     return {
         "has_video": "video" in kinds,

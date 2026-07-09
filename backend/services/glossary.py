@@ -120,6 +120,77 @@ def apply_safe_corrections(text: str, corrections: Optional[dict] = None) -> tup
     return text, changes
 
 
+_LEAD_TRAIL = re.compile(r"^(\W*)(.*?)(\W*)$", re.DOTALL)
+
+
+def correct_word_tokens(words: list, corrections: Optional[dict] = None) -> tuple[list, list]:
+    """Apply the glossary to word-level tokens. Returns (words, changes).
+
+    Captions are built from `segment["words"]`, not from `segment["text"]`, so
+    correcting only the text leaves the burned-in and .srt captions saying "Poid"
+    while the video description says "POIDH" - which reads as fixed and is not.
+
+    Multi-word rules ("exaball games" -> "ZABAL Gamez") span two tokens, so a
+    per-token pass alone would miss them. Matching spans are collapsed into a
+    single token covering the whole time range, which keeps caption timing sane
+    even when a rule changes the word count ("wave wars" -> "WaveWarZ").
+    """
+    corr = corrections or load_corrections()
+    safe = corr.get("safe", {})
+    if not words:
+        return words, []
+
+    by_len = sorted(safe.keys(), key=len, reverse=True)
+    multi = [w for w in by_len if " " in w]
+    changes = []
+
+    def _text(tok):
+        return (tok.get("word") or "")
+
+    def _core(s):
+        m = _LEAD_TRAIL.match(s)
+        return m.group(1), m.group(2), m.group(3)
+
+    out = []
+    i = 0
+    while i < len(words):
+        matched = False
+
+        for wrong in multi:
+            n = len(wrong.split())
+            if i + n > len(words):
+                continue
+            span = " ".join(_core(_text(w))[1] for w in words[i:i + n])
+            if span.lower() != wrong.lower():
+                continue
+
+            lead = _core(_text(words[i]))[0]
+            trail = _core(_text(words[i + n - 1]))[2]
+            merged = dict(words[i])
+            merged["word"] = f"{lead}{safe[wrong]}{trail}"
+            merged["end"] = words[i + n - 1].get("end", merged.get("end"))
+            out.append(merged)
+            changes.append({"from": wrong, "to": safe[wrong], "count": 1})
+            i += n
+            matched = True
+            break
+
+        if matched:
+            continue
+
+        tok = dict(words[i])
+        lead, core, trail = _core(_text(tok))
+        if core:
+            fixed, tok_changes = apply_safe_corrections(core, corr)
+            if fixed != core:
+                tok["word"] = f"{lead}{fixed}{trail}"
+                changes.extend(tok_changes)
+        out.append(tok)
+        i += 1
+
+    return out, changes
+
+
 def flag_review_terms(text: str, corrections: Optional[dict] = None) -> list:
     """Find review-only terms present in the text. Never edits; returns flags."""
     corr = corrections or load_corrections()

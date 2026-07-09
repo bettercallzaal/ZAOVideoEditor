@@ -374,3 +374,53 @@ def test_ffmpeg_service_has_ass_filter_agrees_with_probe():
     probe = subprocess.run(["ffmpeg", "-hide_banner", "-h", "filter=ass"],
                            capture_output=True, text=True)
     assert impl() is ("Unknown filter" not in (probe.stdout + probe.stderr))
+
+
+# --- duration of raw elementary streams ------------------------------------
+
+def _make_raw_aac(path, seconds=3):
+    """A Juke space export: raw AAC with no container index, named .mp4."""
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}",
+         "-c:a", "aac", "-f", "adts", str(path)],
+        check=True, capture_output=True,
+    )
+    return str(path)
+
+
+def test_raw_aac_duration_is_decoded_not_estimated(tmp_path):
+    """ffprobe reports a bitrate estimate for a raw stream, on BOTH the format
+    and the stream. A real 54:10 space reported 57:59 - 3.8 minutes long."""
+    raw = _make_raw_aac(tmp_path / "space.mp4", seconds=3)
+    assert ag.probe_streams(raw)["duration"] == pytest.approx(3.0, abs=0.35)
+
+
+def test_indexed_container_duration_is_not_re_decoded(tmp_path, monkeypatch):
+    """Only raw streams pay the decode cost."""
+    audio = _make_audio(tmp_path / "a.mp3")  # mp3 is raw; use a real container
+    wav = tmp_path / "a.wav"
+    subprocess.run(["ffmpeg", "-y", "-i", audio, str(wav)], check=True, capture_output=True)
+
+    called = []
+    monkeypatch.setattr(ag, "_decoded_duration", lambda p: called.append(p))
+    ag.probe_streams(str(wav))
+    assert called == [], "an indexed container must not be decoded"
+
+
+def test_raw_stream_does_get_decoded(tmp_path, monkeypatch):
+    raw = _make_raw_aac(tmp_path / "space.mp4", seconds=2)
+    called = []
+
+    def spy(p):
+        called.append(p)
+        return 2.0
+
+    monkeypatch.setattr(ag, "_decoded_duration", spy)
+    assert ag.probe_streams(raw)["duration"] == 2.0
+    assert called == [raw]
+
+
+def test_decode_failure_falls_back_to_the_estimate(tmp_path, monkeypatch):
+    raw = _make_raw_aac(tmp_path / "space.mp4", seconds=2)
+    monkeypatch.setattr(ag, "_decoded_duration", lambda p: None)
+    assert ag.probe_streams(raw)["duration"] > 0, "must not zero out on decode failure"
