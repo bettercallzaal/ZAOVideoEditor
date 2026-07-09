@@ -200,6 +200,46 @@ and a `/recordings/N` publish bundle.
 
 ---
 
+## Audio spaces (Juke, Zuke, X Spaces)
+
+An audio space has no video track, so every visual stage - captions, clips,
+reframe, thumbnails - used to fail on it with `No video stream found`. The
+audiogram bridge renders a branded 1920x1080 card plus a live waveform and muxes
+it with the audio, turning a space into an ordinary video project.
+
+Upload or ingest an audio file and the audiogram is built automatically. Pass
+`audiogram=false` to skip it if you only want a transcript.
+
+```bash
+# Whole path in one command: space -> 1080p mp4 + captions + YouTube metadata
+python scripts/space_to_youtube.py ~/Downloads/space.ogg \
+  --title "ZABAL GAMEZ Fireside" --host zaal
+
+# Straight from a Zuke space (recap API supplies audio URL, title, host, guests)
+python scripts/space_to_youtube.py --space-id abc123 --zuke-base https://zuke.thezao.com
+
+# Three-minute smoke render before committing to a two-hour encode
+python scripts/space_to_youtube.py ~/Downloads/space.ogg --minutes 3
+```
+
+Writes `<slug>.mp4`, `<slug>.srt`, and `<slug>.youtube.txt` (title, description,
+chapters, tags). Nothing is uploaded; publishing stays manual.
+
+Notes:
+
+- **Captions ship as an `.srt` sidecar.** YouTube ingests it natively, so the
+  16:9 path needs no libass. `--burn` bakes captions into the picture for
+  platforms without a caption track (Shorts, TikTok, Reels) and requires an
+  ffmpeg built with libass - homebrew's default `ffmpeg` formula has none.
+- **A space export is often a `.mp4` holding only an audio stream.** Detection
+  probes for a video stream rather than trusting the extension.
+- **`--quality fast` (Whisper base) hallucinates on intro music**, looping a word
+  for many seconds. Use `--quality best` for anything you will publish.
+- Existing endpoints: `GET /api/audiogram/{project}/status`,
+  `POST /api/audiogram/{project}`.
+
+---
+
 ## Architecture
 
 - **Python FastAPI engine** (`backend/`) - transcription, ffmpeg, clips, captions; runs

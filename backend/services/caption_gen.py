@@ -274,13 +274,24 @@ def format_timestamp_ass(seconds: float) -> str:
     return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
 
 
+def drop_degenerate(captions: list) -> list:
+    """Remove zero-length and inverted cues.
+
+    Whisper can loop on music or silence and emit a run of repeated words that
+    all share one timestamp, which becomes a cue with start == end. Players and
+    YouTube's caption validator reject those, so they never reach a viewer -
+    they just make the whole file suspect. Drop them at the boundary.
+    """
+    return [c for c in captions if c["end"] > c["start"]]
+
+
 def generate_srt(captions: list, style: str = "classic") -> str:
     """Generate SRT file content."""
     style_config = get_style(style)
     uppercase = style_config.get("uppercase", False)
 
     lines = []
-    for i, cap in enumerate(captions):
+    for i, cap in enumerate(drop_degenerate(captions)):
         lines.append(str(i + 1))
         lines.append(f"{format_timestamp_srt(cap['start'])} --> {format_timestamp_srt(cap['end'])}")
         text = cap["text"].upper() if uppercase else cap["text"]
@@ -354,7 +365,7 @@ Style: Default,{font_name},{font_size},{text_color},{secondary_color},{outline_c
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"""
 
     events = []
-    for cap in captions:
+    for cap in drop_degenerate(captions):
         start = format_timestamp_ass(cap["start"])
         end = format_timestamp_ass(cap["end"])
         text = cap["text"].upper() if uppercase else cap["text"]
