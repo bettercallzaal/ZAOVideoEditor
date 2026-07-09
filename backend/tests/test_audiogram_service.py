@@ -424,3 +424,34 @@ def test_decode_failure_falls_back_to_the_estimate(tmp_path, monkeypatch):
     raw = _make_raw_aac(tmp_path / "space.mp4", seconds=2)
     monkeypatch.setattr(ag, "_decoded_duration", lambda p: None)
     assert ag.probe_streams(raw)["duration"] > 0, "must not zero out on decode failure"
+
+
+def test_is_audio_only_never_decodes(tmp_path, monkeypatch):
+    """find_video() calls this per request; decoding an hour of audio to answer
+    a yes/no question turns a cheap HTTP request into seconds of CPU."""
+    raw = _make_raw_aac(tmp_path / "space.mp4", seconds=2)
+
+    def boom(_p):
+        raise AssertionError("is_audio_only must not decode")
+
+    monkeypatch.setattr(ag, "_decoded_duration", boom)
+    assert ag.is_audio_only(raw) is True
+
+
+def test_render_audiogram_does_not_decode_to_validate(tmp_path, monkeypatch):
+    raw = _make_raw_aac(tmp_path / "space.mp4", seconds=2)
+    calls = []
+    monkeypatch.setattr(ag, "_decoded_duration", lambda p: calls.append(p) or 2.0)
+    ag.render_audiogram(raw, str(tmp_path / "o.mp4"), title="t")
+    assert calls == [], "the render only needs stream kinds, not an exact duration"
+
+
+def test_exact_duration_flag_controls_the_decode(tmp_path, monkeypatch):
+    raw = _make_raw_aac(tmp_path / "space.mp4", seconds=2)
+    calls = []
+    monkeypatch.setattr(ag, "_decoded_duration", lambda p: calls.append(p) or 2.0)
+
+    ag.probe_streams(raw, exact_duration=False)
+    assert calls == []
+    ag.probe_streams(raw, exact_duration=True)
+    assert calls == [raw]

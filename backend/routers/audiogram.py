@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from ..services import audiogram_service as ag
 from ..services import task_manager as tm
-from ..services.project_utils import PROJECTS_DIR, validate_project_name
+from ..services.project_utils import get_project_dir, is_within
 
 router = APIRouter(prefix="/api/audiogram", tags=["audiogram"])
 
@@ -29,8 +29,10 @@ class AudiogramRequest(BaseModel):
 
 def _find_input(project_dir: Path) -> Path:
     for ext in INPUT_EXTS:
-        p = project_dir / "input" / f"main{ext}"
+        p = (project_dir / "input" / f"main{ext}").resolve()
         if p.exists():
+            if not is_within(p, project_dir.resolve()):
+                raise HTTPException(403, "Access denied")
             return p
     raise HTTPException(404, "No input media in project")
 
@@ -48,12 +50,10 @@ def _do_render(task_id: str, project_dir: Path, media: Path, req: AudiogramReque
 @router.get("/{project_name}/status")
 async def status(project_name: str):
     """Whether this project is audio-only, and whether its audiogram exists yet."""
-    validate_project_name(project_name)
-    project_dir = PROJECTS_DIR / project_name
-    if not project_dir.exists():
-        raise HTTPException(404, "Project not found")
+    project_dir = get_project_dir(project_name)
 
     media = _find_input(project_dir)
+    # exact_duration decodes the file (O(length)); this endpoint exists to report it.
     info = ag.probe_streams(str(media))
     audiogram = project_dir / "processing" / "audiogram.mp4"
 
@@ -69,10 +69,7 @@ async def status(project_name: str):
 @router.post("/{project_name}")
 async def render(project_name: str, req: AudiogramRequest):
     """Render the audiogram for an audio-only project. Returns a task id."""
-    validate_project_name(project_name)
-    project_dir = PROJECTS_DIR / project_name
-    if not project_dir.exists():
-        raise HTTPException(404, "Project not found")
+    project_dir = get_project_dir(project_name)
 
     media = _find_input(project_dir)
     if not ag.is_audio_only(str(media)):

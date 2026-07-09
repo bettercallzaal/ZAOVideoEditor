@@ -104,7 +104,7 @@ def _decoded_duration(media_path: str) -> Optional[float]:
     return int(h) * 3600 + int(m) * 60 + int(s) + float(f"0.{frac}")
 
 
-def probe_streams(media_path: str) -> dict:
+def probe_streams(media_path: str, exact_duration: bool = True) -> dict:
     """Return {'has_video': bool, 'has_audio': bool, 'duration': float}.
 
     Unlike get_video_params(), this never raises on audio-only input. That is
@@ -114,7 +114,11 @@ def probe_streams(media_path: str) -> dict:
     It carries no container index, so ffprobe estimates duration from the bitrate
     and can be minutes off - one real 54:10 recording reported 57:59. Every
     downstream number (the card footer, --minutes, the render verifier's expected
-    duration) inherits that error, so decode when the stream duration is missing.
+    duration) inherits that error, so decode to get the truth.
+
+    That decode is O(file length) - 1.7s for 54 minutes. Pass exact_duration=False
+    when you only need the stream kinds, so a request handler asking "is this
+    audio-only?" does not decode an hour of audio to answer a yes/no question.
     """
     cmd = [
         "ffprobe", "-v", "error",
@@ -140,7 +144,7 @@ def probe_streams(media_path: str) -> dict:
     # come from the same bitrate estimate, so neither is evidence. The format name
     # is the only signal. (Checking "is the stream duration missing?" never fires.)
     formats = set((fmt.get("format_name") or "").split(","))
-    if "audio" in kinds and formats & _RAW_FORMATS:
+    if exact_duration and "audio" in kinds and formats & _RAW_FORMATS:
         exact = _decoded_duration(media_path)
         if exact:
             duration = exact
@@ -157,8 +161,12 @@ def is_audio_only(media_path: str) -> bool:
 
     A Juke space export is often a .mp4 containing a single AAC stream and no
     video stream at all, so extension sniffing is not enough.
+
+    Never decodes. find_video() calls this on every captions/clips/silence request,
+    and decoding an hour of audio to answer a yes/no question turns a cheap request
+    into seconds of CPU.
     """
-    info = probe_streams(media_path)
+    info = probe_streams(media_path, exact_duration=False)
     return info["has_audio"] and not info["has_video"]
 
 
@@ -333,7 +341,7 @@ def render_audiogram(audio_path: str, out_path: str, title: str,
     start:    seek into the audio before rendering, for clip windows.
     """
     width, height = aspect_size(aspect)
-    info = probe_streams(audio_path)
+    info = probe_streams(audio_path, exact_duration=False)  # only stream kinds needed
     if not info["has_audio"]:
         raise RuntimeError(f"No audio stream in {audio_path}; nothing to render.")
     if info["has_video"]:
