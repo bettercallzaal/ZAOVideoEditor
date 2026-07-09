@@ -217,11 +217,16 @@ def main():
     # Whisper loops on long audio and emits one sentence for tens of minutes. The
     # segment count still looks healthy and the render still verifies, because the
     # pixels are fine and only the words are wrong. Stop before the encode.
-    if result.get("repetition_collapse"):
+    from verify_transcript import verify as verify_transcript
+
+    tr = verify_transcript(segments, audio_duration=info["duration"])
+    for c in tr["checks"]:
+        log(f"  [{'PASS' if c['ok'] else 'FAIL'}] {c['name']}: {c['detail']}")
+    if not tr["ok"]:
         raise SystemExit(
-            f"TRANSCRIPT COLLAPSED: {result['repetition_ratio']:.0%} of segments repeat "
-            f"the previous one. This is a Whisper repetition loop, not a conversation.\n"
-            f"Refusing to render. Try --quality best, or transcribe with Groq "
+            f"\nTRANSCRIPT FAILED VERIFICATION: {', '.join(tr['failed'])}\n"
+            f"This is a Whisper failure, not a conversation. Refusing to spend an "
+            f"hour encoding it.\nTry --quality best, or transcribe with Groq "
             f"(set GROQ_API_KEY)."
         )
 

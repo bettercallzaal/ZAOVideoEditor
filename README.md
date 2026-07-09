@@ -240,6 +240,29 @@ render_short("space.ogg", "out/clip.mp4", start=40, end=55,
              segments=segments, style="bold_pop")
 ```
 
+### Verifying a transcript (the words)
+
+```bash
+python scripts/verify_transcript.py out/transcripts/space.cut.json --duration 3250
+```
+
+Whisper collapses into a repetition loop on long audio and emits one sentence for
+tens of minutes. A real 54-minute space transcribed into `"So, yeah."` repeated
+five hundred times - and the segment count looked healthy, the captions were
+well-formed, the video rendered, and **every check in `verify_render` passed**.
+The pixels were fine. Only the words were wrong.
+
+This reads the words: segment-to-segment repetition, loops inside a single
+segment, vocabulary diversity, speech rate, coverage of the audio, and whether the
+opening segments are the glossary prompt read back as speech.
+
+**Do not use model confidence for this.** The collapsed transcript scored
+`avg_logprob -0.030`, *better* than a healthy one's `-0.144`. Repeated tokens are
+trivially predictable, so Whisper is most confident exactly when it is looping.
+
+`space_to_youtube` runs this before rendering and refuses to spend an hour
+encoding a broken transcript.
+
 ### Verifying a render (the stop signal)
 
 `space_to_youtube.py` measures the finished mp4 and exits non-zero if it is
