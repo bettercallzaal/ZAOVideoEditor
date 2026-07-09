@@ -155,6 +155,8 @@ def main():
                    help="Caption style: classic, box, bold_pop, highlight, brand_light, brand_dark")
     p.add_argument("--speakers", action="store_true",
                    help="Label who is talking. Needs pyannote.audio, torch, and HF_TOKEN.")
+    p.add_argument("--no-verify", action="store_true",
+                   help="Skip measuring the finished mp4. Not recommended.")
     args = p.parse_args()
 
     if not args.source and not args.space_id:
@@ -257,10 +259,33 @@ def main():
     log(f"video     {mp4_path}  ({size_mb:.1f} MB)")
     log(f"captions  {srt_path}")
     log(f"metadata  {meta_path}")
+
+    # Measure the artifact, not the exit code. Every render bug this pipeline has
+    # shipped left ffmpeg exiting 0 with a valid, wrong file.
+    verified = True
+    if not args.no_verify:
+        from verify_render import verify
+
+        log("")
+        log("verifying the render...")
+        report = verify(str(mp4_path), aspect="16:9",
+                        expect_captions=bool(args.burn), srt=str(srt_path),
+                        duration=info["duration"])
+        for c in report["checks"]:
+            log(f"  [{'PASS' if c['ok'] else 'FAIL'}] {c['name']}: {c['detail']}")
+        verified = report["ok"]
+        if not verified:
+            log("")
+            log(f"RENDER FAILED VERIFICATION: {', '.join(report['failed'])}")
+            log("Do not upload this file.")
+
     if args.minutes:
         log(f"NOTE: smoke render, capped at {args.minutes} min. Drop --minutes for the full space.")
     log("")
     log("Upload is manual on purpose. Nothing was pushed to YouTube.")
+
+    if not verified:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

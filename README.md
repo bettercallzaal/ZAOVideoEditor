@@ -240,6 +240,28 @@ render_short("space.ogg", "out/clip.mp4", start=40, end=55,
              segments=segments, style="bold_pop")
 ```
 
+### Verifying a render (the stop signal)
+
+`space_to_youtube.py` measures the finished mp4 and exits non-zero if it is
+broken. Run it standalone on any render:
+
+```bash
+python scripts/verify_render.py out/clip.mp4 --aspect 9:16 \
+    --expect-captions --srt out/clip.srt --duration 15
+```
+
+It samples frames and counts pixels: the waveform is visible, the captions are
+actually burned in, the video is not frozen, dimensions and duration match, and
+the `.srt` has no zero-length cues running past the end of the video. Exit 0 or 1,
+plus a JSON report.
+
+This exists because exit codes lie. Every render bug this repo has shipped left
+`ffmpeg` exiting 0, `export_clip` returning `captioned: True`, and the unit suite
+green, while the output was a Short with no captions or an hour of video with an
+invisible waveform. If you automate anything here, make **this** the exit
+condition - it reads the artifact, and nothing upstream of the artifact can fake
+it. Skip it with `--no-verify` only if you enjoy uploading broken video.
+
 Notes:
 
 - **Captions ship as an `.srt` sidecar.** YouTube ingests it natively, so the
