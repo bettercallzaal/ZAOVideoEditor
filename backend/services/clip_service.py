@@ -127,15 +127,21 @@ def export_clip(video_path: str, start: float, end: float, out_path: Path,
         raise RuntimeError(f"Clip reframe failed: {result.stderr[-400:]}")
 
     captioned = False
+    caption_error = None
     if ass_path:
         # Pass 2: burn captions (libass or Pillow fallback) onto the reframed clip.
         # Best-effort: if the burn fails, keep the reframed clip uncaptioned rather
-        # than failing the whole clip.
+        # than failing the whole clip. But return the reason - a vertical clip with
+        # no captions is useless on Shorts/TikTok/Reels, and a caller that cannot
+        # tell "captioned" from "silently gave up" will ship the useless one.
         from .ffmpeg_service import burn_captions as _burn
         try:
             _burn(str(reframe_target), str(ass_path), str(out_path), style_name=style)
             captioned = out_path.exists()
+            if not captioned:
+                caption_error = "burn reported success but produced no file"
         except Exception as e:
+            caption_error = str(e)
             print(f"Clip caption burn failed, keeping uncaptioned clip: {e}")
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
@@ -149,4 +155,6 @@ def export_clip(video_path: str, start: float, end: float, out_path: Path,
         "aspect": aspect,
         "duration": round(duration, 1),
         "captioned": captioned,
+        # None when captions were not requested or the burn succeeded.
+        "caption_error": caption_error,
     }

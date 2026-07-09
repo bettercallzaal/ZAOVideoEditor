@@ -55,8 +55,10 @@ def test_broken_pipe_stops_cleanly():
 
 def test_finish_ok_when_exit_zero_even_if_pipe_broke():
     proc = _FakeProc(returncode=0)
+    stdin = proc.stdin  # _finish_overlay_pipe detaches proc.stdin after closing it
     _finish_overlay_pipe(proc, pipe_broke=True)  # must not raise
-    assert proc.stdin.closed
+    assert stdin.closed
+    assert proc.stdin is None, "stdin must be detached so communicate() cannot re-flush it"
 
 
 def test_finish_raises_on_ffmpeg_failure():

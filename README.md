@@ -225,12 +225,34 @@ python scripts/space_to_youtube.py ~/Downloads/space.ogg --minutes 3
 Writes `<slug>.mp4`, `<slug>.srt`, and `<slug>.youtube.txt` (title, description,
 chapters, tags). Nothing is uploaded; publishing stays manual.
 
+### Vertical clips (Shorts / TikTok / Reels)
+
+A Short is rendered natively at 9:16 rather than cropped out of the 16:9
+audiogram - a centre crop cuts the title in half and reduces the waveform to a
+hairline. Captions are burned in, falling back to a Pillow overlay when the local
+ffmpeg has no libass.
+
+```python
+from backend.services.audiogram_service import render_short
+
+render_short("space.ogg", "out/clip.mp4", start=40, end=55,
+             title="Zaal x Kenny", subtitle="hosted by @zaal",
+             segments=segments, style="bold_pop")
+```
+
 Notes:
 
 - **Captions ship as an `.srt` sidecar.** YouTube ingests it natively, so the
   16:9 path needs no libass. `--burn` bakes captions into the picture for
   platforms without a caption track (Shorts, TikTok, Reels) and requires an
   ffmpeg built with libass - homebrew's default `ffmpeg` formula has none.
+  Vertical clips via `render_short` burn captions either way.
+- **Brand glossary reads are layered.** The bundled seed in
+  `backend/data/transcript-corrections.json` is the base; point
+  `STUDIO_GLOSSARY_PATH` at the team's living file (zabalgamez
+  `data/transcript-corrections.json`) to overlay it. The two are *not* supersets
+  of each other - replacing one with the other silently drops rules. Writes
+  (teach-a-term) go to the living file.
 - **A space export is often a `.mp4` holding only an audio stream.** Detection
   probes for a video stream rather than trusting the extension.
 - **`--quality fast` (Whisper base) hallucinates on intro music**, looping a word

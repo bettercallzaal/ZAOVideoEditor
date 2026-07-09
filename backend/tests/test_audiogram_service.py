@@ -233,3 +233,144 @@ def test_drop_degenerate_removes_inverted_cues():
 def test_waveform_uses_sqrt_scale():
     """Linear scale draws conversational speech as a near-flat line."""
     assert "scale=sqrt" in ag.build_filtergraph()
+
+
+# --- aspect-native rendering (Shorts) -------------------------------------
+
+def test_aspect_sizes():
+    assert ag.aspect_size("16:9") == (1920, 1080)
+    assert ag.aspect_size("9:16") == (1080, 1920)
+    assert ag.aspect_size("1:1") == (1080, 1080)
+
+
+def test_unknown_aspect_raises():
+    with pytest.raises(ValueError, match="Unsupported aspect"):
+        ag.aspect_size("4:3")
+
+
+def test_portrait_moves_the_waveform_off_the_caption_band():
+    """Reusing the landscape ratio drops the waveform behind burned captions."""
+    _, _, land_y = ag._wave_geometry(1920, 1080)
+    _, _, port_y = ag._wave_geometry(1080, 1920)
+    assert land_y / 1080 > 0.6
+    assert port_y / 1920 < 0.5
+
+
+def test_portrait_waveform_is_proportionally_taller():
+    _, land_h, _ = ag._wave_geometry(1920, 1080)
+    _, port_h, _ = ag._wave_geometry(1080, 1920)
+    assert port_h / 1080 > land_h / 1920, "a narrow waveform reads as a hairline"
+
+
+def test_filtergraph_uses_draw_full():
+    """draw=scale makes strokes translucent whenever samples-per-column != 1.
+
+    48000/30 = 1600 samples. At 1600px wide that is exactly one sample per
+    column and nothing is antialiased, which is why 16:9 looked fine and 9:16
+    rendered a nearly invisible waveform.
+    """
+    assert "draw=full" in ag.build_filtergraph(width=1080, height=1920)
+    assert "draw=full" in ag.build_filtergraph(width=1920, height=1080)
+
+
+def test_filtergraph_trims_in_graph_not_with_input_seek():
+    """-ss before -i shifts audio PTS while the looped card starts at 0, so
+    overlay pairs them wrong and the waveform vanishes. Trim inside the graph."""
+    graph = ag.build_filtergraph(width=1080, height=1920, start=40, duration=15)
+    assert "atrim=start=40:end=55" in graph
+    assert "asetpts=PTS-STARTPTS" in graph
+    assert "asplit=2" in graph, "wave and muxed audio must share one trimmed stream"
+    assert f"[{ag.AUDIO_LABEL}]" in graph
+
+
+def test_filtergraph_without_window_has_no_atrim():
+    assert "atrim" not in ag.build_filtergraph()
+
+
+def test_filtergraph_duration_only_starts_at_zero():
+    graph = ag.build_filtergraph(duration=15)
+    assert "atrim=end=15" in graph
+
+
+def test_render_short_is_native_9_16_not_a_crop(tmp_path):
+    audio = _make_audio(tmp_path / "a.mp3", seconds=6)
+    res = ag.render_short(audio, str(tmp_path / "s.mp4"), start=1.0, end=4.0,
+                          title="Space", aspect="9:16")
+
+    assert res["aspect"] == "9:16"
+    assert res["duration"] == 3.0
+    video = next(s for s in _streams(tmp_path / "s.mp4") if s["codec_type"] == "video")
+    assert (video["width"], video["height"]) == (1080, 1920)
+    assert ag.probe_streams(str(tmp_path / "s.mp4"))["duration"] == pytest.approx(3.0, abs=0.4)
+
+
+def test_render_short_rejects_inverted_window(tmp_path):
+    audio = _make_audio(tmp_path / "a.mp3")
+    with pytest.raises(ValueError, match="end must be after start"):
+        ag.render_short(audio, str(tmp_path / "s.mp4"), start=5.0, end=1.0, title="x")
+
+
+def test_card_fills_any_aspect(tmp_path):
+    from PIL import Image
+    for aspect in ("16:9", "9:16", "1:1"):
+        w, h = ag.aspect_size(aspect)
+        card = ag.build_card(str(tmp_path / f"c{w}x{h}.png"), "Zaal x Kenny",
+                             subtitle="hosted by @zaal", footer="58 min",
+                             width=w, height=h)
+        with Image.open(card) as img:
+            assert img.size == (w, h)
+
+
+# --- caption wrapping (Pillow fallback) -----------------------------------
+
+def test_captions_wrap_to_frame_width():
+    """A 5-word line at 6.5% of a 1920px height runs off a 1080px-wide Short."""
+    from PIL import Image, ImageDraw, ImageFont
+    from backend.services.ffmpeg_service import _find_font, _wrap_to_width
+
+    draw = ImageDraw.Draw(Image.new("RGB", (1080, 1920)))
+    font = ImageFont.truetype(_find_font(bold=True), 124)
+
+    lines = _wrap_to_width(draw, "MADE IT. WHAT'S UP, KENNY?", font, 1080 - 108)
+    assert len(lines) > 1
+    for line in lines:
+        assert draw.textlength(line, font=font) <= 1080 - 108
+
+
+def test_wrap_keeps_an_overlong_single_word():
+    from PIL import Image, ImageDraw, ImageFont
+    from backend.services.ffmpeg_service import _find_font, _wrap_to_width
+
+    draw = ImageDraw.Draw(Image.new("RGB", (200, 200)))
+    font = ImageFont.truetype(_find_font(bold=True), 120)
+    assert _wrap_to_width(draw, "SUPERCALIFRAGILISTIC", font, 100) == ["SUPERCALIFRAGILISTIC"]
+
+
+def test_wrap_of_empty_text_is_not_empty():
+    from PIL import Image, ImageDraw, ImageFont
+    from backend.services.ffmpeg_service import _find_font, _wrap_to_width
+
+    draw = ImageDraw.Draw(Image.new("RGB", (200, 200)))
+    font = ImageFont.truetype(_find_font(bold=True), 20)
+    assert _wrap_to_width(draw, "", font, 100) == [""]
+
+
+def test_finish_overlay_pipe_survives_closed_stdin():
+    """communicate() flushes proc.stdin; flushing a closed file raises ValueError,
+    which is neither BrokenPipeError nor OSError. That killed every burn."""
+    import subprocess, sys
+    from backend.services.ffmpeg_service import _finish_overlay_pipe
+
+    proc = subprocess.Popen([sys.executable, "-c", "import sys; sys.stdin.buffer.read()"],
+                            stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc.stdin.write(b"x")
+    proc.stdin.close()
+    _finish_overlay_pipe(proc, pipe_broke=False)  # must not raise
+    assert proc.returncode == 0
+
+
+def test_ffmpeg_service_has_ass_filter_agrees_with_probe():
+    from backend.services.ffmpeg_service import _has_ass_filter as impl
+    probe = subprocess.run(["ffmpeg", "-hide_banner", "-h", "filter=ass"],
+                           capture_output=True, text=True)
+    assert impl() is ("Unknown filter" not in (probe.stdout + probe.stderr))
