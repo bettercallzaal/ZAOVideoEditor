@@ -162,11 +162,20 @@ def burn_captions(video_path: str, ass_path: str, output_path: str,
 
 
 def _has_ass_filter() -> bool:
-    """Check if ffmpeg has the ASS subtitle filter (needs libass)."""
+    """Check if ffmpeg has the ASS subtitle filter (needs libass).
+
+    Probe the filter directly. Scanning `-filters` output for the token "ass" is
+    fragile: the listing contains "allpass", "asuperpass", "bandpass" and the
+    line "Pass the source unchanged to the output". Note that ffmpeg exits 0 even
+    for an unknown filter, so the exit code proves nothing - the output text does.
+    """
+    if not shutil.which("ffmpeg"):
+        return False
     result = subprocess.run(
-        ["ffmpeg", "-filters"], capture_output=True, text=True,
+        ["ffmpeg", "-hide_banner", "-h", "filter=ass"],
+        capture_output=True, text=True,
     )
-    return "ass" in result.stdout.split() if result.returncode == 0 else False
+    return "Unknown filter" not in (result.stdout + result.stderr)
 
 
 def _burn_captions_pillow(video_path: str, ass_path: str, output_path: str,
@@ -322,11 +331,21 @@ def _finish_overlay_pipe(proc, pipe_broke: bool):
     """Close the pipe and wait; raise only if ffmpeg actually failed.
 
     An early pipe close with exit code 0 (e.g. -shortest) is a valid output.
+
+    communicate() flushes proc.stdin itself, and flushing an already-closed file
+    raises ValueError("flush of closed file") - which is neither BrokenPipeError
+    nor OSError, so it escaped the old guard and killed every caption burn on
+    ffmpeg builds without libass. Detach stdin after closing it so communicate()
+    leaves it alone.
     """
-    try:
-        proc.stdin.close()
-    except (BrokenPipeError, OSError):
-        pass
+    if proc.stdin is not None:
+        try:
+            if not proc.stdin.closed:
+                proc.stdin.close()
+        except (BrokenPipeError, OSError, ValueError):
+            pass
+        proc.stdin = None
+
     _, stderr = proc.communicate()
     if proc.returncode != 0:
         msg = stderr.decode(errors="replace") if stderr else ""
@@ -336,36 +355,70 @@ def _finish_overlay_pipe(proc, pipe_broke: bool):
 def _render_caption_image(width, height, font, text,
                           text_color, outline_color, outline_width,
                           bg_color, margin_bottom, pad_x, pad_y, corner_radius):
-    """Render a single caption as a transparent RGBA PIL Image."""
+    """Render a single caption as a transparent RGBA PIL Image.
+
+    Wraps to the frame width. A caption is split by word count, not pixels, so on
+    a narrow (9:16) frame a five-word line at 6.5% of the height runs straight off
+    both edges. libass wraps for us; the Pillow fallback has to do it itself.
+    """
     from PIL import Image, ImageDraw
 
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    bbox = draw.textbbox((0, 0), text, font=font)
-    tw = bbox[2] - bbox[0]
-    th = bbox[3] - bbox[1]
+    side_margin = max(pad_x, int(width * 0.05))
+    lines = _wrap_to_width(draw, text, font, width - side_margin * 2)
+
+    line_h = max(
+        (draw.textbbox((0, 0), ln, font=font)[3] - draw.textbbox((0, 0), ln, font=font)[1])
+        for ln in lines
+    )
+    leading = int(line_h * 0.30)
+    block_h = line_h * len(lines) + leading * (len(lines) - 1)
+    widths = [draw.textbbox((0, 0), ln, font=font)[2] - draw.textbbox((0, 0), ln, font=font)[0]
+              for ln in lines]
+    block_w = max(widths)
 
     if bg_color:
-        box_w = tw + pad_x * 2
-        box_h = th + pad_y * 2
+        box_w = block_w + pad_x * 2
+        box_h = block_h + pad_y * 2
         box_x = (width - box_w) // 2
         box_y = height - margin_bottom - box_h
-        text_x = box_x + pad_x
-        text_y = box_y + pad_y
         draw.rounded_rectangle(
             [box_x, box_y, box_x + box_w, box_y + box_h],
             radius=corner_radius, fill=bg_color,
         )
+        top = box_y + pad_y
     else:
-        text_x = (width - tw) // 2
-        text_y = height - margin_bottom - th
+        top = height - margin_bottom - block_h
 
-    if outline_color and outline_width > 0:
-        _draw_text_outline(draw, text_x, text_y, text, font, outline_color, outline_width)
+    for i, line in enumerate(lines):
+        lx = (width - widths[i]) // 2
+        ly = top + i * (line_h + leading)
+        if outline_color and outline_width > 0:
+            _draw_text_outline(draw, lx, ly, line, font, outline_color, outline_width)
+        draw.text((lx, ly), line, font=font, fill=text_color)
 
-    draw.text((text_x, text_y), text, font=font, fill=text_color)
     return img
+
+
+def _wrap_to_width(draw, text: str, font, max_width: int) -> list:
+    """Greedy word wrap. Always returns at least one line, even if a single word
+    is wider than max_width (better a clipped word than an empty caption)."""
+    words = text.split()
+    if not words:
+        return [text]
+
+    lines, current = [], words[0]
+    for word in words[1:]:
+        candidate = f"{current} {word}"
+        if draw.textlength(candidate, font=font) <= max_width:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+    return lines
 
 
 def _render_highlight_image(width, height, font, words, active_idx,

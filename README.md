@@ -200,6 +200,113 @@ and a `/recordings/N` publish bundle.
 
 ---
 
+## Audio spaces (Juke, Zuke, X Spaces)
+
+An audio space has no video track, so every visual stage - captions, clips,
+reframe, thumbnails - used to fail on it with `No video stream found`. The
+audiogram bridge renders a branded 1920x1080 card plus a live waveform and muxes
+it with the audio, turning a space into an ordinary video project.
+
+Upload or ingest an audio file and the audiogram is built automatically. Pass
+`audiogram=false` to skip it if you only want a transcript.
+
+```bash
+# Whole path in one command: space -> 1080p mp4 + captions + YouTube metadata
+python scripts/space_to_youtube.py ~/Downloads/space.ogg \
+  --title "ZABAL GAMEZ Fireside" --host zaal
+
+# Straight from a Zuke space (recap API supplies audio URL, title, host, guests)
+python scripts/space_to_youtube.py --space-id abc123 --zuke-base https://zuke.thezao.com
+
+# Three-minute smoke render before committing to a two-hour encode
+python scripts/space_to_youtube.py ~/Downloads/space.ogg --minutes 3
+```
+
+Writes `<slug>.mp4`, `<slug>.srt`, and `<slug>.youtube.txt` (title, description,
+chapters, tags). Nothing is uploaded; publishing stays manual.
+
+### Vertical clips (Shorts / TikTok / Reels)
+
+A Short is rendered natively at 9:16 rather than cropped out of the 16:9
+audiogram - a centre crop cuts the title in half and reduces the waveform to a
+hairline. Captions are burned in, falling back to a Pillow overlay when the local
+ffmpeg has no libass.
+
+```python
+from backend.services.audiogram_service import render_short
+
+render_short("space.ogg", "out/clip.mp4", start=40, end=55,
+             title="Zaal x Kenny", subtitle="hosted by @zaal",
+             segments=segments, style="bold_pop")
+```
+
+### Verifying a transcript (the words)
+
+```bash
+python scripts/verify_transcript.py out/transcripts/space.cut.json --duration 3250
+```
+
+Whisper collapses into a repetition loop on long audio and emits one sentence for
+tens of minutes. A real 54-minute space transcribed into `"So, yeah."` repeated
+five hundred times - and the segment count looked healthy, the captions were
+well-formed, the video rendered, and **every check in `verify_render` passed**.
+The pixels were fine. Only the words were wrong.
+
+This reads the words: segment-to-segment repetition, loops inside a single
+segment, vocabulary diversity, speech rate, coverage of the audio, and whether the
+opening segments are the glossary prompt read back as speech.
+
+**Do not use model confidence for this.** The collapsed transcript scored
+`avg_logprob -0.030`, *better* than a healthy one's `-0.144`. Repeated tokens are
+trivially predictable, so Whisper is most confident exactly when it is looping.
+
+`space_to_youtube` runs this before rendering and refuses to spend an hour
+encoding a broken transcript.
+
+### Verifying a render (the stop signal)
+
+`space_to_youtube.py` measures the finished mp4 and exits non-zero if it is
+broken. Run it standalone on any render:
+
+```bash
+python scripts/verify_render.py out/clip.mp4 --aspect 9:16 \
+    --expect-captions --srt out/clip.srt --duration 15
+```
+
+It samples frames and counts pixels: the waveform is visible, the captions are
+actually burned in, the video is not frozen, dimensions and duration match, and
+the `.srt` has no zero-length cues running past the end of the video. Exit 0 or 1,
+plus a JSON report.
+
+This exists because exit codes lie. Every render bug this repo has shipped left
+`ffmpeg` exiting 0, `export_clip` returning `captioned: True`, and the unit suite
+green, while the output was a Short with no captions or an hour of video with an
+invisible waveform. If you automate anything here, make **this** the exit
+condition - it reads the artifact, and nothing upstream of the artifact can fake
+it. Skip it with `--no-verify` only if you enjoy uploading broken video.
+
+Notes:
+
+- **Captions ship as an `.srt` sidecar.** YouTube ingests it natively, so the
+  16:9 path needs no libass. `--burn` bakes captions into the picture for
+  platforms without a caption track (Shorts, TikTok, Reels) and requires an
+  ffmpeg built with libass - homebrew's default `ffmpeg` formula has none.
+  Vertical clips via `render_short` burn captions either way.
+- **Brand glossary reads are layered.** The bundled seed in
+  `backend/data/transcript-corrections.json` is the base; point
+  `STUDIO_GLOSSARY_PATH` at the team's living file (zabalgamez
+  `data/transcript-corrections.json`) to overlay it. The two are *not* supersets
+  of each other - replacing one with the other silently drops rules. Writes
+  (teach-a-term) go to the living file.
+- **A space export is often a `.mp4` holding only an audio stream.** Detection
+  probes for a video stream rather than trusting the extension.
+- **`--quality fast` (Whisper base) hallucinates on intro music**, looping a word
+  for many seconds. Use `--quality best` for anything you will publish.
+- Existing endpoints: `GET /api/audiogram/{project}/status`,
+  `POST /api/audiogram/{project}`.
+
+---
+
 ## Architecture
 
 - **Python FastAPI engine** (`backend/`) - transcription, ffmpeg, clips, captions; runs

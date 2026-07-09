@@ -77,13 +77,29 @@ def _make_project(name: str, title: str, source: str) -> Path:
 
 
 def _do_process(task_id: str, project_dir: Path, media: str, title: str,
-                speakers: bool, quality: str = "fast", captions_url: str = ""):
+                speakers: bool, quality: str = "fast", captions_url: str = "",
+                audiogram: bool = True):
+    # Transcription reads audio directly, so it runs before any audiogram: a
+    # caller who only wants a transcript never pays for an encode.
     result = rp.process_recording(
         media, title=title, quality=quality, engine="auto",
         out_dir=str(project_dir / "transcripts"), readable_llm=True,
         detect_speakers=speakers, captions_url=captions_url or None,
-        on_progress=lambda pct, msg: tm.update_task(task_id, progress=pct, message=msg),
+        on_progress=lambda pct, msg: tm.update_task(task_id, progress=int(pct * 0.7), message=msg),
     )
+
+    # An audio-only recording has no picture, so captions/clips/reframe would
+    # all fail on it. Materialize a video stream and it becomes a normal project.
+    audiogram_path = None
+    if audiogram:
+        from ..services import audiogram_service as ag
+        if ag.is_audio_only(media):
+            audiogram_path = str(ag.ensure_video_track(
+                project_dir, media, title=title,
+                on_progress=lambda pct, msg: tm.update_task(
+                    task_id, progress=70 + int(pct * 0.3), message=msg),
+            ))
+
     return {
         "title": result["title"],
         "duration": result["duration"],
@@ -91,12 +107,14 @@ def _do_process(task_id: str, project_dir: Path, media: str, title: str,
         "review_flags": result["review_flags"],
         "edit_sheet": result["edit_sheet"],
         "readable_backend": result["readable_backend"],
+        "audiogram": audiogram_path,
     }
 
 
 @router.post("/process")
 async def process(file: UploadFile = File(...), title: str = Form(""),
-                  speakers: bool = Form(False), quality: str = Form("fast")):
+                  speakers: bool = Form(False), quality: str = Form("fast"),
+                  audiogram: bool = Form(True)):
     """Create a project from an uploaded recording and run the pipeline."""
     orig = file.filename or "recording"
     ext = Path(orig).suffix.lower()
@@ -111,12 +129,14 @@ async def process(file: UploadFile = File(...), title: str = Form(""),
     await _save_upload(file, dest)
 
     task_id = tm.create_task(name, "studio_process")
-    tm.run_in_background(task_id, _do_process, project_dir, str(dest), disp, speakers, quality)
+    tm.run_in_background(task_id, _do_process, project_dir, str(dest), disp,
+                         speakers, quality, "", audiogram)
     return {"project": name, "task_id": task_id}
 
 
 def _do_ingest_process(task_id: str, project_dir: Path, url: str, title: str,
-                       speakers: bool, quality: str = "fast", use_captions: bool = False):
+                       speakers: bool, quality: str = "fast", use_captions: bool = False,
+                       audiogram: bool = True):
     from ..services import ingest_service
     tm.update_task(task_id, progress=2, message="Fetching from link...")
     ingest_service.download_to_project(
@@ -126,13 +146,14 @@ def _do_ingest_process(task_id: str, project_dir: Path, url: str, title: str,
     media = _find_input(project_dir)
     # When asked, use the YouTube VOD's own captions (fast) instead of Whisper.
     cap = url if (use_captions and ("youtube.com" in url or "youtu.be" in url)) else ""
-    return _do_process(task_id, project_dir, str(media), title, speakers, quality, captions_url=cap)
+    return _do_process(task_id, project_dir, str(media), title, speakers, quality,
+                       captions_url=cap, audiogram=audiogram)
 
 
 @router.post("/ingest")
 async def ingest_link(url: str = Form(...), title: str = Form(""),
                       speakers: bool = Form(False), quality: str = Form("fast"),
-                      use_captions: bool = Form(False)):
+                      use_captions: bool = Form(False), audiogram: bool = Form(True)):
     """Pull a recording from a URL (YouTube / Twitch / Restream / HLS) and process it."""
     from ..services import ingest_service
     if not ingest_service.yt_dlp_available():
@@ -144,7 +165,8 @@ async def ingest_link(url: str = Form(...), title: str = Form(""),
     name = _slug(disp)
     project_dir = _make_project(name, disp, "studio-link")
     task_id = tm.create_task(name, "studio_process")
-    tm.run_in_background(task_id, _do_ingest_process, project_dir, url, disp, speakers, quality, use_captions)
+    tm.run_in_background(task_id, _do_ingest_process, project_dir, url, disp, speakers,
+                         quality, use_captions, audiogram)
     return {"project": name, "task_id": task_id}
 
 

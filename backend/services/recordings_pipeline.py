@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .whisper_service import transcribe_audio
-from .glossary import load_corrections, correct_transcript_text
+from .glossary import load_corrections, correct_transcript_text, correct_word_tokens
 from .readable_pass import make_readable
 from .cut_planner import build_edit_sheet
 
@@ -54,6 +54,32 @@ def _cut_transcript_md(segments: list, title: str) -> str:
         who = f" {speaker}:" if speaker else ""
         lines.append(f"{prefix}{who} {(seg.get('text') or '').strip()}")
     return "\n".join(lines) + "\n"
+
+
+def repetition_ratio(segments: list) -> float:
+    """Fraction of segments identical to the one before them.
+
+    Whisper collapses into a repetition loop on long audio and emits the same
+    sentence for tens of minutes. Nothing downstream notices: the segment count
+    looks healthy, the captions are well-formed, the video renders, and the render
+    verifier passes because the pixels are fine. Only the words are wrong.
+
+    A real conversation repeats a line occasionally ("yeah", "right"); it does not
+    repeat one 500 times. Measured on a real 54-minute space that looped from the
+    4-minute mark: 0.967. A healthy 3-minute transcript of the same recording: 0.0.
+    """
+    texts = [(s.get("text") or "").strip() for s in segments]
+    texts = [t for t in texts if t]
+    if len(texts) < 10:
+        return 0.0
+    dup = sum(1 for i in range(1, len(texts)) if texts[i] == texts[i - 1])
+    return dup / len(texts)
+
+
+# Above this, the transcript is a repetition loop rather than a conversation.
+# The real failure scored 0.967 and a healthy transcript 0.0, so 0.10 separates
+# them by ~10x while tolerating a genuinely repetitive stretch.
+REPETITION_LIMIT = 0.10
 
 
 def _dedupe_flags(flags: list) -> list:
@@ -98,17 +124,27 @@ def _transcribe(audio_path: str, quality: str, engine: str, progress) -> dict:
     )
 
 
-def _detect_speakers(audio_path: str, segments: list, progress) -> list:
-    """Best-effort diarization -> speaker labels on segments. Never blocks."""
+def _detect_speakers(audio_path: str, segments: list, progress) -> tuple[list, Optional[str]]:
+    """Best-effort diarization -> speaker labels. Never blocks. Returns (segments, error).
+
+    Diarization needs pyannote.audio, torch, and a gated HF_TOKEN, none of which
+    are guaranteed. Failing the whole transcript over a missing optional model
+    would be wrong. But swallowing the reason is worse: a caller who explicitly
+    asked for speakers used to get unlabeled segments and no indication why, and
+    a print() into a background worker's stdout reaches nobody.
+
+    So: still non-fatal, but the reason comes back to the caller.
+    """
     try:
         from .diarization import diarize_audio, assign_speakers_to_segments
         progress(78, "Detecting speakers...")
         turns = diarize_audio(audio_path)
-        if turns:
-            return assign_speakers_to_segments(segments, turns)
+        if not turns:
+            return segments, "diarization produced no speaker turns"
+        return assign_speakers_to_segments(segments, turns), None
     except Exception as e:
-        print(f"Speaker detection skipped: {e}")
-    return segments
+        progress(78, f"Speaker detection unavailable: {e}")
+        return segments, str(e)
 
 
 def process_recording(media_path: str, title: str = "", quality: str = "fast",
@@ -145,16 +181,18 @@ def process_recording(media_path: str, title: str = "", quality: str = "fast",
             progress(12, "Fetching YouTube captions...")
             data = fetch_captions(captions_url)
             segments = data.get("segments", [])
+            speaker_error = None
             if detect_speakers:
                 audio_path, tmp = _ensure_audio(media)
                 try:
-                    segments = _detect_speakers(str(audio_path), segments, progress)
+                    segments, speaker_error = _detect_speakers(str(audio_path), segments, progress)
                 finally:
                     if tmp and tmp.exists():
                         tmp.unlink()
             duration = data.get("duration") or (segments[-1].get("end", 0.0) if segments else 0.0)
             return _finish_pipeline(segments, duration, title, out_dir, readable_llm,
-                                    plan_cuts, suggest_falsestarts, media, progress)
+                                    plan_cuts, suggest_falsestarts, media, progress,
+                                    speaker_error=speaker_error)
         except Exception as e:
             progress(10, f"No usable captions ({e}); transcribing instead...")
 
@@ -168,8 +206,9 @@ def process_recording(media_path: str, title: str = "", quality: str = "fast",
     try:
         data = _transcribe(str(audio_path), quality, engine, progress)
         segments = data.get("segments", [])
+        speaker_error = None
         if detect_speakers:
-            segments = _detect_speakers(str(audio_path), segments, progress)
+            segments, speaker_error = _detect_speakers(str(audio_path), segments, progress)
     finally:
         _TRANSCRIBE_GATE.release()
         if tmp and tmp.exists():
@@ -177,15 +216,22 @@ def process_recording(media_path: str, title: str = "", quality: str = "fast",
 
     duration = data.get("duration") or (segments[-1].get("end", 0.0) if segments else 0.0)
     return _finish_pipeline(segments, duration, title, out_dir, readable_llm,
-                            plan_cuts, suggest_falsestarts, media, progress)
+                            plan_cuts, suggest_falsestarts, media, progress,
+                            speaker_error=speaker_error)
 
 
 def _finish_pipeline(segments, duration, title, out_dir, readable_llm,
-                     plan_cuts, suggest_falsestarts, media, progress):
+                     plan_cuts, suggest_falsestarts, media, progress,
+                     speaker_error=None):
     """Stages after transcription: glossary correct -> cut plan -> readable -> write.
 
     Shared by the Whisper path and the YouTube-captions fast path.
     """
+    rep = repetition_ratio(segments)
+    if rep >= REPETITION_LIMIT:
+        progress(79, f"WARNING: transcript looks like a repetition loop "
+                     f"({rep:.0%} of segments repeat the previous one)")
+
     progress(80, "Applying brand glossary...")
     corr = load_corrections()
     all_flags, all_changes = [], []
@@ -194,6 +240,11 @@ def _finish_pipeline(segments, duration, title, out_dir, readable_llm,
         seg["text"] = res["text"]
         all_flags.extend(res["review_flags"])
         all_changes.extend(res["safe_changes"])
+        # Captions are built from the word tokens, not from seg["text"]. Correcting
+        # only the text ships a video whose description says POIDH and whose
+        # captions say Poid.
+        if seg.get("words"):
+            seg["words"], _ = correct_word_tokens(seg["words"], corr)
     review_flags = _dedupe_flags(all_flags)
 
     progress(85, "Planning cuts...")
@@ -215,6 +266,13 @@ def _finish_pipeline(segments, duration, title, out_dir, readable_llm,
         "review_flags": review_flags,
         "glossary_changes": all_changes,
         "edit_sheet": edit_sheet,
+        # None when speakers were not requested or diarization succeeded.
+        "speaker_error": speaker_error,
+        "speakers_detected": any(s.get("speaker") for s in segments),
+        # Whisper loops on long audio. Nothing else in this pipeline notices:
+        # the segment count looks healthy and the captions are well-formed.
+        "repetition_ratio": round(rep, 4),
+        "repetition_collapse": rep >= REPETITION_LIMIT,
     }
 
     if out_dir:

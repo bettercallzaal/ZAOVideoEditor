@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from pathlib import Path
 
-from .routers import projects, assembly, transcription, transcript, captions, metadata, export, speakers, fillers, clips, silence, ai_tools, youtube, content, batch, templates, pipeline, ingest, recordings, studio
+from .routers import projects, assembly, transcription, transcript, captions, metadata, export, speakers, fillers, clips, silence, ai_tools, youtube, content, batch, templates, pipeline, ingest, recordings, studio, audiogram
 
 app = FastAPI(title="ZAO Video Editor", version="0.1.0")
 
@@ -64,6 +64,7 @@ app.include_router(pipeline.router)
 app.include_router(ingest.router)
 app.include_router(recordings.router)
 app.include_router(studio.router)
+app.include_router(audiogram.router)
 
 # Serve video files from projects directory
 PROJECTS_DIR = Path(__file__).parent.parent / "projects"

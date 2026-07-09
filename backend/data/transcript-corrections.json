@@ -1,5 +1,5 @@
 {
-  "_note": "Seeded from the ZAO recordings spec (sections 3 + 4). Reconcile with the canonical transcript-corrections.json in zabalgames when the pipeline is wired. 'safe' rules auto-apply (whole-word, case-insensitive). 'review' rules are flagged for a human, never auto-applied.",
+  "_note": "Bundled seed. Reads are LAYERED: this file is the base and STUDIO_GLOSSARY_PATH (the zabalgames canonical file) overlays it, winning on conflict. The two are not supersets of each other - do not replace one with the other. 'safe' rules auto-apply (whole-word, case-insensitive). 'review' rules are flagged for a human, never auto-applied.",
   "safe": {
     "wave wars": "WaveWarZ",
     "wavewars": "WaveWarZ",
@@ -24,21 +24,65 @@
     "jose goats": "Joseph Goats",
     "zao devs": "ZAO DEVZ",
     "zaodevz": "ZAO DEVZ",
-    "zao music": "ZAO Music"
+    "zao music": "ZAO Music",
+    "exaball games": "ZABAL Gamez",
+    "exaball": "ZABAL"
   },
   "review": [
-    {"term": "base", "to": "Base", "note": "the chain Base vs the common word 'base'/'based' - confirm context"},
-    {"term": "sol", "to": "SOL", "note": "the token SOL vs a name/word - confirm context"},
-    {"term": "twitter", "to": "X", "note": "X/Twitter and 'Twitter handle' -> X / 'X handle' - confirm"},
-    {"term": "zaal", "note": "Zaal the person vs ZAO the org - do not auto-change"},
-    {"term": "games", "note": "ZABAL Gamez brand vs 'video games' the noun - do not auto-change"},
-    {"term": "Hurricane Mike", "note": "speaker handle in WaveWarZ talk - verify spelling"},
-    {"term": "It's Wonderful", "note": "proper name - verify"},
-    {"term": "Godcloud", "note": "proper name - verify"},
-    {"term": "Geekmyth", "note": "proper name - verify"},
-    {"term": "Juan", "note": "proper name - verify"},
-    {"term": "Tuck Nuisance", "note": "proper name - verify"},
-    {"term": "Ride the WaveWarZ", "note": "song title vs brand phrase - confirm"},
-    {"term": "Zap Fan", "note": "possible mishear - confirm"}
+    {
+      "term": "base",
+      "to": "Base",
+      "note": "the chain Base vs the common word 'base'/'based' - confirm context"
+    },
+    {
+      "term": "sol",
+      "to": "SOL",
+      "note": "the token SOL vs a name/word - confirm context"
+    },
+    {
+      "term": "twitter",
+      "to": "X",
+      "note": "X/Twitter and 'Twitter handle' -> X / 'X handle' - confirm"
+    },
+    {
+      "term": "zaal",
+      "note": "Zaal the person vs ZAO the org - do not auto-change"
+    },
+    {
+      "term": "games",
+      "note": "ZABAL Gamez brand vs 'video games' the noun - do not auto-change"
+    },
+    {
+      "term": "Hurricane Mike",
+      "note": "speaker handle in WaveWarZ talk - verify spelling"
+    },
+    {
+      "term": "It's Wonderful",
+      "note": "proper name - verify"
+    },
+    {
+      "term": "Godcloud",
+      "note": "proper name - verify"
+    },
+    {
+      "term": "Geekmyth",
+      "note": "proper name - verify"
+    },
+    {
+      "term": "Juan",
+      "note": "proper name - verify"
+    },
+    {
+      "term": "Tuck Nuisance",
+      "note": "proper name - verify"
+    },
+    {
+      "term": "Ride the WaveWarZ",
+      "note": "song title vs brand phrase - confirm"
+    },
+    {
+      "term": "Zap Fan",
+      "note": "possible mishear - confirm"
+    }
   ]
 }

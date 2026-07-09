@@ -76,6 +76,8 @@ def find_video(project_dir: Path, include_captioned: bool = False) -> Path:
         candidates.append(project_dir / "processing" / "captioned.mp4")
         candidates.append(project_dir / "processing" / "trimmed.mp4")
     candidates.append(project_dir / "processing" / "assembled.mp4")
+    # Audio-only projects (spaces, AMAs) carry their video stream here.
+    candidates.append(project_dir / "processing" / "audiogram.mp4")
 
     for candidate in candidates:
         if candidate.exists():
@@ -84,7 +86,27 @@ def find_video(project_dir: Path, include_captioned: bool = False) -> Path:
     for ext in [".mp4", ".mov", ".mkv", ".webm"]:
         p = project_dir / "input" / f"main{ext}"
         if p.exists():
+            # A space export is often a .mp4 holding a single audio stream and
+            # no video stream at all, so the extension proves nothing. Returning
+            # it here would surface downstream as a bare "No video stream found"
+            # from get_video_params(), miles from the cause.
+            from .audiogram_service import is_audio_only
+            if is_audio_only(str(p)):
+                raise HTTPException(
+                    409,
+                    f"{p.name} has no video stream. Audio-only projects need an "
+                    "audiogram: POST /api/audiogram/{project_name} to render one.",
+                )
             return p
+
+    for ext in [".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"]:
+        if (project_dir / "input" / f"main{ext}").exists():
+            raise HTTPException(
+                409,
+                f"Project input is audio-only (main{ext}). Render an audiogram "
+                "first: POST /api/audiogram/{project_name}",
+            )
+
     raise HTTPException(404, "No video found in project")
 
 
