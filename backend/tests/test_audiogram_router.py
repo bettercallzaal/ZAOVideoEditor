@@ -9,6 +9,14 @@ from backend.main import app
 from backend.services import project_utils
 
 
+def _has_ffmpeg() -> bool:
+    from shutil import which
+    return which("ffmpeg") is not None and which("ffprobe") is not None
+
+
+pytestmark = pytest.mark.skipif(not _has_ffmpeg(), reason="ffmpeg/ffprobe not on PATH")
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     projects = tmp_path / "projects"
