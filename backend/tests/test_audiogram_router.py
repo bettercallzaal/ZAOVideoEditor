@@ -26,7 +26,11 @@ def client(tmp_path, monkeypatch):
     import backend.routers.audiogram as router_mod
     monkeypatch.setattr(router_mod, "get_project_dir", project_utils.get_project_dir)
 
-    monkeypatch.setenv("STUDIO_PASSWORD", "")
+    # AccessPasswordMiddleware fails CLOSED since #48: with no STUDIO_PASSWORD and
+    # no ALLOW_OPEN_LOCAL, every request is 401. Clearing the password alone leaves
+    # the app shut, which is the point of that fix.
+    monkeypatch.delenv("STUDIO_PASSWORD", raising=False)
+    monkeypatch.setenv("ALLOW_OPEN_LOCAL", "1")
     return TestClient(app), projects
 
 
@@ -52,6 +56,27 @@ def test_traversal_names_are_rejected(client, bad):
     c, _ = client
     r = c.get(f"/api/audiogram/{bad}/status")
     assert r.status_code in (403, 404, 422), r.status_code
+
+
+def test_audiogram_routes_are_behind_the_access_gate(monkeypatch):
+    """The gate fails closed: no password and no ALLOW_OPEN_LOCAL means 401.
+
+    These endpoints render video and read project paths, so they must not be an
+    unauthenticated hole in a shared deployment.
+    """
+    monkeypatch.delenv("STUDIO_PASSWORD", raising=False)
+    monkeypatch.delenv("ALLOW_OPEN_LOCAL", raising=False)
+    c = TestClient(app)
+    assert c.get("/api/audiogram/anything/status").status_code == 401
+    assert c.post("/api/audiogram/anything", json={}).status_code == 401
+
+
+def test_a_configured_password_is_enforced(monkeypatch):
+    monkeypatch.setenv("STUDIO_PASSWORD", "hunter2")
+    monkeypatch.setenv("ALLOW_OPEN_LOCAL", "1")  # must not override a real password
+    c = TestClient(app)
+    assert c.get("/api/audiogram/anything/status").status_code == 401
+    assert c.get("/api/audiogram/anything/status", auth=("u", "wrong")).status_code == 401
 
 
 def test_status_404_for_unknown_project(client):
