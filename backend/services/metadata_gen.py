@@ -674,18 +674,13 @@ def _build_description_summary(segments: list, top_entities: list,
                         context_words.append(clean)
         entity_contexts[entity] = Counter(context_words).most_common(3)
 
-    # Build natural sentences about the content
-    if guest_name:
-        # Find what the guest works on
-        work_entities = [e for e in top_entities
-                         if e.lower() != guest_name.lower()]
-        if work_entities:
-            parts.append(
-                f"{guest_name} discusses their work with "
-                f"{', '.join(work_entities[:3])}"
-                f"{' and more' if len(work_entities) > 3 else ''}."
-            )
-    else:
+    # The hook line already leads with "{guest} shares {top_keywords}...", so do
+    # NOT repeat the guest + entity list here - that produced a near-duplicate
+    # sentence (e.g. "Kenny shares POIDH, Zaal, ZABAL Gamez, and more." followed
+    # by "Kenny discusses their work with POIDH, Zaal, ZABAL Gamez and more.").
+    # For guest episodes the themes line below carries the summary; only the
+    # no-guest case (which has no such hook) lists the entities here.
+    if not guest_name:
         parts.append(
             f"The conversation covers {', '.join(top_entities[:3])}"
             f"{' and more' if len(top_entities) > 3 else ''}."
