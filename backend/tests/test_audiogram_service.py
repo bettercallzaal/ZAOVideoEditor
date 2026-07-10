@@ -323,13 +323,30 @@ def test_card_fills_any_aspect(tmp_path):
 
 # --- caption wrapping (Pillow fallback) -----------------------------------
 
+def test_find_font_returns_a_scalable_font():
+    """Every candidate used to be macOS-only, so the Linux Docker image found
+    nothing, fell back to Pillow's ~11px bitmap default, and rendered a 1080p
+    title card in a font you could not read. The fallback fails silently."""
+    from backend.services.ffmpeg_service import _find_font
+
+    for bold in (True, False):
+        path = _find_font(bold=bold)
+        assert path, f"no scalable font found (bold={bold}); captions would be unreadable"
+
+
+def _font(size, bold=True):
+    from PIL import ImageFont
+    from backend.services.ffmpeg_service import _find_font
+    return ImageFont.truetype(_find_font(bold=bold), size)
+
+
 def test_captions_wrap_to_frame_width():
     """A 5-word line at 6.5% of a 1920px height runs off a 1080px-wide Short."""
-    from PIL import Image, ImageDraw, ImageFont
-    from backend.services.ffmpeg_service import _find_font, _wrap_to_width
+    from PIL import Image, ImageDraw
+    from backend.services.ffmpeg_service import _wrap_to_width
 
     draw = ImageDraw.Draw(Image.new("RGB", (1080, 1920)))
-    font = ImageFont.truetype(_find_font(bold=True), 124)
+    font = _font(124)
 
     lines = _wrap_to_width(draw, "MADE IT. WHAT'S UP, KENNY?", font, 1080 - 108)
     assert len(lines) > 1
@@ -338,20 +355,20 @@ def test_captions_wrap_to_frame_width():
 
 
 def test_wrap_keeps_an_overlong_single_word():
-    from PIL import Image, ImageDraw, ImageFont
-    from backend.services.ffmpeg_service import _find_font, _wrap_to_width
+    from PIL import Image, ImageDraw
+    from backend.services.ffmpeg_service import _wrap_to_width
 
     draw = ImageDraw.Draw(Image.new("RGB", (200, 200)))
-    font = ImageFont.truetype(_find_font(bold=True), 120)
+    font = _font(120)
     assert _wrap_to_width(draw, "SUPERCALIFRAGILISTIC", font, 100) == ["SUPERCALIFRAGILISTIC"]
 
 
 def test_wrap_of_empty_text_is_not_empty():
-    from PIL import Image, ImageDraw, ImageFont
-    from backend.services.ffmpeg_service import _find_font, _wrap_to_width
+    from PIL import Image, ImageDraw
+    from backend.services.ffmpeg_service import _wrap_to_width
 
     draw = ImageDraw.Draw(Image.new("RGB", (200, 200)))
-    font = ImageFont.truetype(_find_font(bold=True), 20)
+    font = _font(20)
     assert _wrap_to_width(draw, "", font, 100) == [""]
 
 

@@ -174,9 +174,21 @@ def test_collapse_is_caught_despite_perfect_model_confidence():
 
 
 def test_thresholds_separate_measured_values():
-    """collapsed 0.967 / loop-start 0.420 / healthy 0.000 segment repetition;
-    collapsed 0.072 / healthy 0.42+ vocabulary diversity."""
+    """collapsed 0.967 / loop-start 0.420 / healthy 0.004 segment repetition;
+    collapsed 0.064 / healthy 0.434 windowed vocabulary diversity."""
     assert MAX_SEGMENT_REPETITION < 0.420 / 4
-    assert MAX_SEGMENT_REPETITION > 0.0
-    assert MIN_VOCAB_DIVERSITY > 0.072 * 1.5
-    assert MIN_VOCAB_DIVERSITY < 0.42 / 2
+    assert MAX_SEGMENT_REPETITION > 0.004
+    assert MIN_VOCAB_DIVERSITY > 0.064 * 2
+    assert MIN_VOCAB_DIVERSITY < 0.434 / 2
+
+
+def test_vocab_diversity_does_not_depend_on_transcript_length():
+    """A plain unique/total ratio falls as a transcript grows: one healthy
+    54-minute transcript scored 0.605 over its first 200 words and 0.152 over all
+    8581, against a 0.15 limit. That threshold was really a threshold on duration,
+    and a healthy two-hour recording would have been rejected."""
+    unit = CONVO * 40           # a long, non-repeating-enough conversation
+    short = vocab_diversity(_segs(CONVO * 5))
+    long_ = vocab_diversity(_segs(unit))
+    assert abs(short - long_) < 0.12, f"length-dependent: {short:.3f} vs {long_:.3f}"
+    assert long_ > MIN_VOCAB_DIVERSITY

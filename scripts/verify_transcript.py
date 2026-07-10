@@ -37,8 +37,10 @@ MAX_SEGMENT_REPETITION = 0.10
 # segment was pure prompt echo and its last was one word fifty times.
 MAX_INTRA_SEGMENT_REPETITION = 0.55
 
-# Vocabulary diversity, unique words over total. Collapsed 0.072, healthy 0.42+.
-# 0.15 clears the collapse by 2x and sits far under any real speech.
+# Windowed vocabulary diversity (see vocab_diversity). Measured on the same
+# 54-minute recording: collapsed 0.064, healthy 0.434, and the healthy value holds
+# at 0.426-0.439 across a quarter, half and all of the transcript. 0.15 clears the
+# collapse by 2.3x and sits 2.9x under a real conversation.
 MIN_VOCAB_DIVERSITY = 0.15
 
 # Whisper decodes initial_prompt as speech, so a glossary term list gets echoed
@@ -89,12 +91,37 @@ def intra_segment_repetition(segments: list) -> float:
     return worst
 
 
+VOCAB_WINDOW = 500
+
+
 def vocab_diversity(segments: list) -> float:
-    """Unique words over total words. A loop has a tiny vocabulary."""
+    """Mean unique-word ratio over sliding windows. A loop has a tiny vocabulary.
+
+    Windowed, because a plain unique/total ratio falls as a transcript gets
+    longer - vocabulary saturates while the word count keeps climbing. Measured
+    on ONE healthy 54-minute transcript:
+
+        first   200 words -> 0.605
+        first  2000 words -> 0.270
+        all    8581 words -> 0.152
+
+    A fixed threshold on that number is really a threshold on duration. This
+    transcript scored 0.152 against a 0.15 limit - a 1.4% margin - and a healthy
+    two-hour recording would have been rejected outright. Averaging the ratio over
+    fixed-size windows removes the length dependence.
+    """
     words = re.findall(r"[a-z']+", " ".join(_texts(segments)).lower())
     if len(words) < 50:
         return 1.0
-    return len(set(words)) / len(words)
+    if len(words) <= VOCAB_WINDOW:
+        return len(set(words)) / len(words)
+
+    step = max(1, VOCAB_WINDOW // 2)
+    ratios = [
+        len(set(words[i:i + VOCAB_WINDOW])) / VOCAB_WINDOW
+        for i in range(0, len(words) - VOCAB_WINDOW + 1, step)
+    ]
+    return sum(ratios) / len(ratios)
 
 
 def words_per_minute(segments: list) -> float:
