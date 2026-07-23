@@ -225,6 +225,15 @@ python scripts/space_to_youtube.py ~/Downloads/space.ogg --minutes 3
 Writes `<slug>.mp4`, `<slug>.srt`, and `<slug>.youtube.txt` (title, description,
 chapters, tags). Nothing is uploaded; publishing stays manual.
 
+**This vs. the PFP recap pipeline:** [ZAODEVZ/Zuke](https://github.com/ZAODEVZ/Zuke)
+(the live-audio app these spaces come from) hands off to two different offline
+render pipelines depending on the goal. Use *this* repo when the goal is "get
+this space onto YouTube" - minutes, not hours. Use
+[bettercallzaal/mp3-to-mp4-pipeline](https://github.com/bettercallzaal/mp3-to-mp4-pipeline)
+instead when the goal is a recap video with a PFP card per guest (Remotion,
+Deepgram diarization, 3-6 hour render). Both read the same
+`GET /api/recordings/recap?spaceId={id}` payload off a Zuke space id.
+
 ### Vertical clips (Shorts / TikTok / Reels)
 
 A Short is rendered natively at 9:16 rather than cropped out of the 16:9
